@@ -109,6 +109,7 @@ field_t fields[] = {
 	{"angle", FOFS(s.angles), F_ANGLEHACK},
 	{"targetShaderName", FOFS(targetShaderName), F_STRING},
 	{"targetShaderNewName", FOFS(targetShaderNewName), F_STRING},
+	{"arena", FOFS(arena), F_STRING},
 
 	{NULL}
 };
@@ -277,6 +278,12 @@ qboolean G_CallSpawn( gentity_t *ent ) {
 	// check item spawn functions
 	for ( item=bg_itemlist+1 ; item->classname ; item++ ) {
 		if ( !strcmp(item->classname, ent->classname) ) {
+//freeze
+			locationSpawn( ent, item );
+			if ( WeaponDisabled( item ) ) {
+				return qfalse;
+			}
+//freeze
 			G_SpawnItem( ent, item );
 			return qtrue;
 		}
@@ -419,7 +426,11 @@ void G_SpawnGEntityFromSpawnVars( void ) {
 	// check for "notteam" flag (GT_FFA, GT_TOURNAMENT, GT_SINGLE_PLAYER)
 	if ( g_gametype.integer >= GT_TEAM ) {
 		G_SpawnInt( "notteam", "0", &i );
+/*freeze
 		if ( i ) {
+freeze*/
+		if ( i && !( ent->classname && !Q_stricmp( ent->classname, "info_player_deathmatch" ) ) ) {
+//freeze
 			ADJUST_AREAPORTAL();
 			G_FreeEntity( ent );
 			return;
@@ -588,7 +599,11 @@ void SP_worldspawn( void ) {
 	G_SpawnString( "enableDust", "0", &s );
 	trap_Cvar_Set( "g_enableDust", s );
 
+/*freeze
 	G_SpawnString( "enableBreath", "0", &s );
+freeze*/
+	G_SpawnString( "enableBreath", "1", &s );
+//freeze
 	trap_Cvar_Set( "g_enableBreath", s );
 
 	g_entities[ENTITYNUM_WORLD].s.number = ENTITYNUM_WORLD;

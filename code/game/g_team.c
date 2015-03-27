@@ -736,6 +736,12 @@ int Team_TouchOurFlag( gentity_t *ent, gentity_t *other, int team ) {
 	}
 #endif
 
+//freeze
+	if ( g_gametype.integer == GT_CTF ) {
+		team_wins( team );
+	}
+//freeze
+
 	cl->ps.powerups[enemy_flag] = 0;
 
 	teamgame.last_flag_capture = level.time;
@@ -912,6 +918,12 @@ gentity_t *Team_GetLocation(gentity_t *ent)
 
 	best = NULL;
 	bestlen = 3*8192.0*8192.0;
+
+//freeze
+	if ( ent->freezeState && is_body( ent->target_ent ) ) {
+		VectorCopy( ent->target_ent->r.currentOrigin, origin );
+	} else
+//freeze
 
 	VectorCopy( ent->r.currentOrigin, origin );
 
@@ -1112,6 +1124,12 @@ void TeamplayInfoMessage( gentity_t *ent ) {
 			if (h < 0) h = 0;
 			if (a < 0) a = 0;
 
+//freeze
+			if ( player->freezeState ) {
+				h = a = 0;
+			}
+//freeze
+
 			Com_sprintf (entry, sizeof(entry),
 				" %i %i %i %i %i %i", 
 //				level.sortedClients[i], player->client->pers.teamState.location, h, a, 
@@ -1173,6 +1191,11 @@ void CheckTeamStatus(void) {
 Only in CTF games.  Red players spawn here at game start.
 */
 void SP_team_CTF_redplayer( gentity_t *ent ) {
+//freeze
+	if ( g_gametype.integer == GT_TEAM ) {
+		ent->classname = "info_player_deathmatch";
+	}
+//freeze
 }
 
 
@@ -1180,6 +1203,11 @@ void SP_team_CTF_redplayer( gentity_t *ent ) {
 Only in CTF games.  Blue players spawn here at game start.
 */
 void SP_team_CTF_blueplayer( gentity_t *ent ) {
+//freeze
+	if ( g_gametype.integer == GT_TEAM ) {
+		ent->classname = "info_player_deathmatch";
+	}
+//freeze
 }
 
 
@@ -1197,6 +1225,237 @@ Targets will be fired when someone spawns in on them.
 void SP_team_CTF_bluespawn(gentity_t *ent) {
 }
 
+// OSP
+char *aTeams[TEAM_NUM_TEAMS] = { "FFA", "^1RED^7", "^4BLUE^7", "Spectators" };
+
+// Swaps active players on teams
+void G_swapTeams(void)
+{
+	int i;
+	gclient_t *cl;
+
+	for(i=0; i<level.numConnectedClients; i++) {
+		cl = level.clients + level.sortedClients[i];
+
+		if(cl->sess.sessionTeam == TEAM_RED) cl->sess.sessionTeam = TEAM_BLUE;
+		else if(cl->sess.sessionTeam == TEAM_BLUE) cl->sess.sessionTeam = TEAM_RED;
+		else continue;
+
+		ClientUserinfoChanged(level.sortedClients[i]);
+		ClientBegin(level.sortedClients[i]);
+	}
+
+	trap_SendServerCommand( -1, "print \"^1Teams have been swapped!^7\n\"");
+}
+
+
+int QDECL G_SortPlayersByScore( const void *a, const void *b ) {
+	gclient_t* cla = &level.clients[ *((int*)a) ];
+	gclient_t* clb = &level.clients[ *((int*)b) ];
+
+	if( cla->ps.persistant[ PERS_SCORE ] > clb->ps.persistant[ PERS_SCORE ] ) {
+		return -1;
+	}
+	if( clb->ps.persistant[ PERS_SCORE ] > cla->ps.persistant[ PERS_SCORE ] ) {
+		return 1;
+	}
+
+	return 0;
+}
+
+int QDECL G_SortPlayersByScoreRate( const void *a, const void *b ) {
+	gclient_t* cla = &level.clients[ *((int*)a) ];
+	gclient_t* clb = &level.clients[ *((int*)b) ];
+	float arate, brate;
+
+	if(cla->pers.connectTime <= 0 &&
+		clb->pers.connectTime <= 0) return 0;
+	if(cla->pers.connectTime <= 0) return 1;
+	if(clb->pers.connectTime <= 0) return -1;
+
+	arate = cla->ps.persistant[PERS_SCORE]
+		/ (level.time - cla->pers.connectTime);
+	brate = clb->ps.persistant[PERS_SCORE]
+		/ (level.time - clb->pers.connectTime);
+
+	if(arate > brate) {
+		return -1;
+	}
+	if(brate > arate) {
+		return 1;
+	}
+
+	return 0;
+}
+
+// Shuffle active players onto teams
+void G_shuffleTeams(void)
+{
+	int i, cTeam, rteam; //, cMedian = level.numNonSpectatorClients / 2;
+	int cnt = 0;
+	int	sortClients[MAX_CLIENTS];
+
+	gclient_t *cl;
+
+	for( i = 0; i < level.numConnectedClients; i++ ) {
+		if ( !(g_entities[i].r.svFlags & SVF_BOT) ) {
+			cl = level.clients + level.sortedClients[ i ];
+
+			if( cl->sess.sessionTeam != TEAM_RED && cl->sess.sessionTeam != TEAM_BLUE ) {
+				continue;
+			}
+
+			sortClients[ cnt++ ] = level.sortedClients[ i ];
+		}
+	}
+
+	if ( !cnt )
+		return;
+
+	if(g_shuffle.integer == SHUFFLE_SCORETIME) {
+		qsort(sortClients, cnt, sizeof(int),
+			G_SortPlayersByScoreRate);
+	}
+	else {
+		qsort(sortClients, cnt, sizeof(int),
+			G_SortPlayersByScore);
+	}
+
+	// Randomly choose which team gets assigned first
+	rteam = ( rand() % 2 ) + 1;
+
+	for( i = 0; i < cnt; i++ ) {
+		cl = level.clients + sortClients[i];
+
+		cTeam = (i % 2) + rteam;
+
+		cl->sess.sessionTeam = cTeam;
+
+		ClientUserinfoChanged(sortClients[i]);
+		ClientBegin(sortClients[i]);
+	}
+
+	trap_SendServerCommand( -1, "print \"^1Teams have been shuffled!^7\n\"");
+}
+
+// q3as Version - Broken
+/*
+void G_shuffleTeams( void ) {
+	int	i, team, clientNum, switches = 0;
+	int	half = level.numPlayingClients / 2;
+	char	userinfo[MAX_INFO_STRING];
+	gclient_t	*client;
+	gentity_t	*ent;
+
+	// Shuffle teams according to g_shuffle, only if a team game
+	if ( g_gametype.integer < GT_TEAM )
+		return;
+
+	// Only balance at the end of maps, not after warmup period expires
+	if ( level.previousTime < level.warmupTime ) // ( level.warmuptime ) is NOT sufficient
+		return;
+	
+	switch ( g_shuffle.integer ) {
+	case SHUFFLE_SCORE:
+		{
+			//Com_Printf("Shuffle - By score\n");
+
+			// Swap highest scoring player to other team
+			team = level.clients[level.sortedClients[0]].sess.sessionTeam == TEAM_BLUE ? TEAM_RED : TEAM_BLUE;
+
+			for ( i = 0; i < level.numPlayingClients; i++ ) {
+
+				clientNum = level.sortedClients[i];
+				client = &level.clients[clientNum];
+				ent = &g_entities[clientNum];
+
+				// Make sure client is connected
+				if ( client->pers.connected != CON_CONNECTED )
+					continue;
+
+				// Team should be TEAM_RED or TEAM_BLUE, not TEAM_SPECTATOR
+				if ( client->sess.sessionTeam == TEAM_SPECTATOR )
+					continue;
+
+				client->sess.sessionTeam = team;
+				trap_GetUserinfo(clientNum, userinfo, sizeof(userinfo));
+				Info_SetValueForKey(userinfo, "team", va("%d", team));
+				trap_SetUserinfo(clientNum, userinfo);
+
+				// Put 1st player on team1, 2nd and 3rd on team2, 4th and 5th on team1, 6th and 7th on team2, etc.
+				switches++;
+				if ( switches % 2 == 1 )
+					team = team == TEAM_BLUE ? TEAM_RED : TEAM_BLUE;
+			}
+		}
+		break;
+	case SHUFFLE_RANDOM:
+		{
+			//Com_Printf("Shuffle - random\n");
+
+			// Randomly choose which team gets assigned first
+			// so you don't always end up with more on one team
+			if ( random() < 0.5 )
+				team = TEAM_RED;
+			else
+				team = TEAM_BLUE;
+
+			// First switch everyone to one team
+			for ( i = 0; i < level.maxclients; i++ ) {
+				client = &level.clients[i];
+				ent = &g_entities[i];
+
+				// Make sure client is connected
+				if ( client->pers.connected != CON_CONNECTED )
+					continue;
+
+				// Team should be TEAM_RED or TEAM_BLUE, not TEAM_SPECTATOR
+				if ( client->sess.sessionTeam == TEAM_SPECTATOR )
+					continue;
+
+				client->sess.sessionTeam = team;
+				trap_GetUserinfo(i, userinfo, sizeof(userinfo));
+				Info_SetValueForKey(userinfo, "team", va("%d", team));
+				trap_SetUserinfo(i, userinfo);
+			}
+
+			// Now put half of the players on the other team
+			team = team == TEAM_BLUE ? TEAM_RED : TEAM_BLUE;
+
+			switches = 0;
+			while ( switches < half ) {
+				clientNum = ( rand() % level.maxclients );
+				client = &level.clients[clientNum];
+				ent = &g_entities[clientNum];
+
+				// Make sure client is connected
+				if ( client->pers.connected == CON_DISCONNECTED ) // != CON_CONNECTED was an infinite loop
+					continue;
+
+				// Team should be TEAM_RED or TEAM_BLUE, not TEAM_SPECTATOR
+				if ( client->sess.sessionTeam == TEAM_SPECTATOR )
+					continue;
+
+				// Check if we've already swapped this client
+				if ( client->sess.sessionTeam == team )
+					continue;
+
+				// Client passed
+				switches++;
+
+				client->sess.sessionTeam = team;
+				trap_GetUserinfo(clientNum, userinfo, sizeof(userinfo));
+				Info_SetValueForKey(userinfo, "team", va("%d", team));
+				trap_SetUserinfo(clientNum, userinfo);
+			}
+		}
+		break;
+	default:
+		 return;
+		 break;
+	}
+}
+*/
 
 #ifdef MISSIONPACK
 /*

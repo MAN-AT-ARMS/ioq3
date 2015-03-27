@@ -440,6 +440,23 @@ void	Svcmd_ForceTeam_f( void ) {
 	SetTeam( &g_entities[cl - level.clients], str );
 }
 
+void Svcmd_SwapTeams_f(void)
+{
+		G_swapTeams();
+		return;
+}
+
+void Svcmd_ShuffleTeams_f(qboolean restart)
+{
+	if (restart)
+	{
+		trap_SendConsoleCommand(EXEC_APPEND, "map_restart 0\n");
+	}
+
+	G_shuffleTeams();
+	return;
+}
+
 char	*ConcatArgs( int start );
 
 /*
@@ -495,6 +512,22 @@ qboolean	ConsoleCommand( void ) {
 
 	if (Q_stricmp (cmd, "listip") == 0) {
 		trap_SendConsoleCommand( EXEC_NOW, "g_banIPs\n" );
+		return qtrue;
+	}
+
+	if (Q_stricmp(cmd, "swap_teams") == 0)
+	{
+		Svcmd_SwapTeams_f();
+		return qtrue;
+	}
+	if (Q_stricmp(cmd, "shuffle_teams") == 0)
+	{
+		Svcmd_ShuffleTeams_f(qfalse);
+		return qtrue;
+	}
+	if (Q_stricmp(cmd, "shuffle_teams_restart") == 0)
+	{
+		Svcmd_ShuffleTeams_f(qtrue);
 		return qtrue;
 	}
 

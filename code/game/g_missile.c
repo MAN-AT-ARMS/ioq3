@@ -260,6 +260,9 @@ static void ProximityMine_Player( gentity_t *mine, gentity_t *player ) {
 		mine->nextthink = level.time + 10 * 1000;
 	}
 }
+//freeze
+void ProximityMine_Body( gentity_t *mine, gentity_t *body );
+//freeze
 #endif
 
 /*
@@ -336,6 +339,13 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 			return;
 		}
 
+//freeze
+		if ( is_body_freeze( other ) ) {
+			ProximityMine_Body( ent, other );
+			return;
+		}
+//freeze
+
 		SnapVectorTowards( trace->endpos, ent->s.pos.trBase );
 		G_SetOrigin( ent, trace->endpos );
 		ent->s.pos.trType = TR_STATIONARY;
@@ -405,6 +415,22 @@ void G_MissileImpact( gentity_t *ent, trace_t *trace ) {
 
 		return;
 	}
+
+/*freeze
+	if ( is_body_freeze( other ) && level.time - other->timestamp > 400 ) {
+		VectorCopy( ent->s.pos.trDelta, forward );
+		VectorNormalize( forward );
+		if ( InvulnerabilityEffect( other, forward, ent->s.pos.trBase, impactpoint, bouncedir ) ) {
+			VectorCopy( bouncedir, trace->plane.normal );
+			eFlags = ent->s.eFlags & EF_BOUNCE_HALF;
+			ent->s.eFlags &= ~EF_BOUNCE_HALF;
+			G_BounceMissile( ent, trace );
+			ent->s.eFlags |= eFlags;
+		}
+		ent->target_ent = other;
+		return;
+	}
+freeze*/
 
 	// is it cheaper in bandwidth to just remove this ent and create a new
 	// one, rather than changing the missile into the explosion?
@@ -532,6 +558,12 @@ gentity_t *fire_plasma (gentity_t *self, vec3_t start, vec3_t dir) {
 	bolt->r.svFlags = SVF_USE_CURRENT_ORIGIN;
 	bolt->s.weapon = WP_PLASMAGUN;
 	bolt->r.ownerNum = self->s.number;
+	//unlagged - projectile nudge
+	if ( g_unlagged.integer ) {
+		// we'll need this for nudging projectiles later
+		bolt->s.otherEntityNum = self->s.number;
+	}
+	//unlagged - projectile nudge
 	bolt->parent = self;
 	bolt->damage = 20;
 	bolt->splashDamage = 15;
@@ -574,6 +606,12 @@ gentity_t *fire_grenade (gentity_t *self, vec3_t start, vec3_t dir) {
 	bolt->s.weapon = WP_GRENADE_LAUNCHER;
 	bolt->s.eFlags = EF_BOUNCE_HALF;
 	bolt->r.ownerNum = self->s.number;
+	//unlagged - projectile nudge
+	if ( g_unlagged.integer ) {
+		// we'll need this for nudging projectiles later
+		bolt->s.otherEntityNum = self->s.number;
+	}
+	//unlagged - projectile nudge
 	bolt->parent = self;
 	bolt->damage = 100;
 	bolt->splashDamage = 100;
@@ -615,6 +653,12 @@ gentity_t *fire_bfg (gentity_t *self, vec3_t start, vec3_t dir) {
 	bolt->r.svFlags = SVF_USE_CURRENT_ORIGIN;
 	bolt->s.weapon = WP_BFG;
 	bolt->r.ownerNum = self->s.number;
+	//unlagged - projectile nudge
+	if ( g_unlagged.integer ) {
+		// we'll need this for nudging projectiles later
+		bolt->s.otherEntityNum = self->s.number;
+	}
+	//unlagged - projectile nudge
 	bolt->parent = self;
 	bolt->damage = 100;
 	bolt->splashDamage = 100;
@@ -655,6 +699,12 @@ gentity_t *fire_rocket (gentity_t *self, vec3_t start, vec3_t dir) {
 	bolt->r.svFlags = SVF_USE_CURRENT_ORIGIN;
 	bolt->s.weapon = WP_ROCKET_LAUNCHER;
 	bolt->r.ownerNum = self->s.number;
+	//unlagged - projectile nudge
+	if ( g_unlagged.integer ) {
+		// we'll need this for nudging projectiles later
+		bolt->s.otherEntityNum = self->s.number;
+	}
+	//unlagged - projectile nudge
 	bolt->parent = self;
 	bolt->damage = 100;
 	bolt->splashDamage = 100;
@@ -697,8 +747,33 @@ gentity_t *fire_grapple (gentity_t *self, vec3_t start, vec3_t dir) {
 	hook->parent = self;
 	hook->target_ent = NULL;
 
+	//unlagged - grapple
+	if ( g_unlagged.integer ) {
+		int hooktime;
+
+		// we might want this later
+		hook->s.otherEntityNum = self->s.number;
+
+		// setting the projectile base time back makes the hook's first
+		// step larger
+
+		if ( self->client ) {
+			hooktime = self->client->pers.cmd.serverTime + 50;
+		}
+		else {
+			hooktime = level.time - MISSILE_PRESTEP_TIME;
+		}
+
+		hook->s.pos.trTime = hooktime;
+	}
+	//unlagged - grapple
+
 	hook->s.pos.trType = TR_LINEAR;
-	hook->s.pos.trTime = level.time - MISSILE_PRESTEP_TIME;		// move a bit on the very first frame
+	//unlagged - grapple
+	if (!g_unlagged.integer ) {
+		hook->s.pos.trTime = level.time - MISSILE_PRESTEP_TIME;		// move a bit on the very first frame
+	}
+	//unlagged - grapple
 	hook->s.otherEntityNum = self->s.number; // use to match beam in client
 	VectorCopy( start, hook->s.pos.trBase );
 	VectorScale( dir, 800, hook->s.pos.trDelta );
@@ -733,6 +808,12 @@ gentity_t *fire_nail( gentity_t *self, vec3_t start, vec3_t forward, vec3_t righ
 	bolt->r.svFlags = SVF_USE_CURRENT_ORIGIN;
 	bolt->s.weapon = WP_NAILGUN;
 	bolt->r.ownerNum = self->s.number;
+	//unlagged - projectile nudge
+	if ( g_unlagged.integer ) {
+		// we'll need this for nudging projectiles later
+		bolt->s.otherEntityNum = self->s.number;
+	}
+	//unlagged - projectile nudge
 	bolt->parent = self;
 	bolt->damage = 20;
 	bolt->methodOfDeath = MOD_NAIL;
@@ -781,6 +862,12 @@ gentity_t *fire_prox( gentity_t *self, vec3_t start, vec3_t dir ) {
 	bolt->s.weapon = WP_PROX_LAUNCHER;
 	bolt->s.eFlags = 0;
 	bolt->r.ownerNum = self->s.number;
+	//unlagged - projectile nudge
+	if ( g_unlagged.integer ) {
+		// we'll need this for nudging projectiles later
+		bolt->s.otherEntityNum = self->s.number;
+	}
+	//unlagged - projectile nudge
 	bolt->parent = self;
 	bolt->damage = 0;
 	bolt->splashDamage = 100;

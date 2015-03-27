@@ -534,7 +534,11 @@ void G_KillBox (gentity_t *ent) {
 
 	for (i=0 ; i<num ; i++) {
 		hit = &g_entities[touch[i]];
+/*freeze
 		if ( !hit->client ) {
+freeze*/
+		if ( !hit->client && !is_body_freeze( hit ) ) {
+//freeze
 			continue;
 		}
 

@@ -284,6 +284,54 @@ static void SV_AddEntToSnapshot( svEntity_t *svEnt, sharedEntity_t *gEnt, snapsh
 	eNums->numSnapshotEntities++;
 }
 
+
+#if defined ANTIWALLHACK
+static int has_player_sound(int entnum)
+{
+	int event;
+	sharedEntity_t *ent;
+	playerState_t *ps;
+
+	// check for weapon ready looping sound
+	ps = SV_GameClientNum(entnum);  
+	if (ps->weapon == WP_RAILGUN || ps->weapon == WP_LIGHTNING)
+		return 1;
+
+	// check for sound event
+	ent = SV_GentityNum(entnum);
+	event = ent->s.event & ~EV_EVENT_BITS;
+	if (event == 0)
+		return 0;
+
+	switch (event)
+	{
+		case EV_WATER_TOUCH:
+		case EV_WATER_LEAVE:
+		case EV_WATER_UNDER:
+		case EV_WATER_CLEAR:
+		case EV_SWIM:
+		case EV_CHANGE_WEAPON:
+		case EV_FOOTSTEP:
+		case EV_FOOTSTEP_METAL:
+		case EV_FOOTSPLASH:
+		case EV_JUMP:
+		case EV_JUMP_PAD:
+		case EV_FALL_SHORT:
+		case EV_FALL_MEDIUM:
+		case EV_FALL_FAR:
+		case EV_TAUNT:
+		case EV_PAIN:
+			return 1;
+			break;
+    
+		default:
+			return 0;
+			break;
+	}
+}
+#endif
+
+
 /*
 ===============
 SV_AddEntitiesVisibleFromPoint
@@ -299,6 +347,10 @@ static void SV_AddEntitiesVisibleFromPoint( vec3_t origin, clientSnapshot_t *fra
 	int		leafnum;
 	byte	*clientpvs;
 	byte	*bitvector;
+
+#if defined ANTIWALLHACK
+	sharedEntity_t *client;
+#endif
 
 	// during an error shutdown message we may need to transmit
 	// the shutdown message after the server has shutdown, so
@@ -408,6 +460,52 @@ static void SV_AddEntitiesVisibleFromPoint( vec3_t origin, clientSnapshot_t *fra
 			}
 		}
 
+#if defined ANTIWALLHACK
+		if (e < sv_maxclients->integer)	// client
+		{
+			if (e == frame->ps.clientNum)
+				continue;
+
+			client = SV_GentityNum(frame->ps.clientNum);
+
+			if (awh_active->integer && !portal && !(client->r.svFlags & SVF_BOT))
+			{
+				if (!AWH_CanSee(frame->ps.clientNum, e))
+				{
+					if (!has_player_sound(e))
+						continue;
+
+					if (!AWH_CanHear(frame->ps.clientNum, e))
+						continue;
+
+					AWH_RandomizePos(frame->ps.clientNum, e);
+				}
+			}
+		}
+#endif
+
+#if defined ANTICHEAT
+		sharedEntity_t *client;
+
+		if (e < sv_maxclients->integer)	// client
+		{
+			if (e == frame->ps.clientNum)
+				continue;
+
+			client = SV_GentityNum(frame->ps.clientNum);
+
+			if (wh_active->integer && !portal && !(client->r.svFlags & SVF_BOT))
+			{
+				if (!SV_CanSee(frame->ps.clientNum, e))
+				{
+					SV_RandomizePos(frame->ps.clientNum, e);
+					SV_AddEntToSnapshot(svEnt, ent, eNums);
+					continue;
+				}
+			}
+		}
+#endif
+
 		// add it
 		SV_AddEntToSnapshot( svEnt, ent, eNums );
 
@@ -511,6 +609,15 @@ static void SV_BuildClientSnapshot( client_t *client ) {
 		ent = SV_GentityNum(entityNumbers.snapshotEntities[i]);
 		state = &svs.snapshotEntities[svs.nextSnapshotEntities % svs.numSnapshotEntities];
 		*state = ent->s;
+
+#if defined ANTICHEAT
+		if (wh_active->integer && entityNumbers.snapshotEntities[i] < sv_maxclients->integer)
+		{
+			if (SV_PositionChanged(entityNumbers.snapshotEntities[i]))
+				SV_RestorePos(entityNumbers.snapshotEntities[i]);
+		}
+#endif
+
 		svs.nextSnapshotEntities++;
 		// this should never hit, map should always be restarted first in SV_Frame
 		if ( svs.nextSnapshotEntities >= 0x7FFFFFFE ) {

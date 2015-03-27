@@ -231,6 +231,16 @@ ifndef DEBUG_CFLAGS
 DEBUG_CFLAGS=-g -O0
 endif
 
+# New anti-wallhack code
+ifndef USE_ANTIWALLHACK
+USE_ANTIWALLHACK=1
+endif
+
+# Old anti-wallhack code
+ifndef USE_ANTICHEAT
+USE_ANTICHEAT=0
+endif
+
 #############################################################################
 
 BD=$(BUILD_DIR)/debug-$(PLATFORM)-$(ARCH)
@@ -930,6 +940,14 @@ ifneq ($(HAVE_VM_COMPILED),true)
 endif
 
 TARGETS =
+
+ifeq ($(USE_ANTIWALLHACK),1)
+  BASE_CFLAGS += -DANTIWALLHACK
+endif
+
+ifeq ($(USE_ANTICHEAT),1)
+  BASE_CFLAGS += -DANTICHEAT
+endif
 
 ifndef FULLBINEXT
   FULLBINEXT=.$(ARCH)$(BINEXT)
@@ -2080,6 +2098,14 @@ Q3OBJ += \
   $(B)/client/zutil.o
 endif
 
+ifeq ($(USE_ANTIWALLHACK),1)
+  Q3OBJ += $(B)/client/sv_wallhack.o
+endif
+
+ifeq ($(USE_ANTICHEAT),1)
+  Q3OBJ += $(B)/client/sv_wallhack_old.o
+endif
+
 ifeq ($(HAVE_VM_COMPILED),true)
   ifneq ($(findstring $(ARCH),x86 x86_64),)
     Q3OBJ += \
@@ -2248,6 +2274,14 @@ Q3DOBJ += \
   $(B)/ded/zutil.o
 endif
 
+ifeq ($(USE_ANTIWALLHACK),1)
+  Q3DOBJ += $(B)/ded/sv_wallhack.o
+endif
+
+ifeq ($(USE_ANTICHEAT),1)
+  Q3DOBJ += $(B)/ded/sv_wallhack_old.o
+endif
+
 ifeq ($(HAVE_VM_COMPILED),true)
   ifneq ($(findstring $(ARCH),x86 x86_64),)
     Q3DOBJ += \
@@ -2383,6 +2417,7 @@ Q3GOBJ_ = \
   $(B)/$(BASEGAME)/game/ai_cmd.o \
   $(B)/$(BASEGAME)/game/ai_dmnet.o \
   $(B)/$(BASEGAME)/game/ai_dmq3.o \
+  $(B)/$(BASEGAME)/game/ai_freeze.o \
   $(B)/$(BASEGAME)/game/ai_main.o \
   $(B)/$(BASEGAME)/game/ai_team.o \
   $(B)/$(BASEGAME)/game/ai_vcmd.o \
@@ -2396,7 +2431,9 @@ Q3GOBJ_ = \
   $(B)/$(BASEGAME)/game/g_client.o \
   $(B)/$(BASEGAME)/game/g_cmds.o \
   $(B)/$(BASEGAME)/game/g_combat.o \
+  $(B)/$(BASEGAME)/game/g_freeze.o \
   $(B)/$(BASEGAME)/game/g_items.o \
+  $(B)/$(BASEGAME)/game/g_match.o \
   $(B)/$(BASEGAME)/game/g_mem.o \
   $(B)/$(BASEGAME)/game/g_misc.o \
   $(B)/$(BASEGAME)/game/g_missile.o \
@@ -2407,6 +2444,7 @@ Q3GOBJ_ = \
   $(B)/$(BASEGAME)/game/g_target.o \
   $(B)/$(BASEGAME)/game/g_team.o \
   $(B)/$(BASEGAME)/game/g_trigger.o \
+  $(B)/$(BASEGAME)/game/g_unlagged.o \
   $(B)/$(BASEGAME)/game/g_utils.o \
   $(B)/$(BASEGAME)/game/g_weapon.o \
   \
@@ -2434,6 +2472,7 @@ MPGOBJ_ = \
   $(B)/$(MISSIONPACK)/game/ai_cmd.o \
   $(B)/$(MISSIONPACK)/game/ai_dmnet.o \
   $(B)/$(MISSIONPACK)/game/ai_dmq3.o \
+  $(B)/$(MISSIONPACK)/game/ai_freeze.o \
   $(B)/$(MISSIONPACK)/game/ai_main.o \
   $(B)/$(MISSIONPACK)/game/ai_team.o \
   $(B)/$(MISSIONPACK)/game/ai_vcmd.o \
@@ -2447,7 +2486,9 @@ MPGOBJ_ = \
   $(B)/$(MISSIONPACK)/game/g_client.o \
   $(B)/$(MISSIONPACK)/game/g_cmds.o \
   $(B)/$(MISSIONPACK)/game/g_combat.o \
+  $(B)/$(MISSIONPACK)/game/g_freeze.o \
   $(B)/$(MISSIONPACK)/game/g_items.o \
+  $(B)/$(MISSIONPACK)/game/g_match.o \
   $(B)/$(MISSIONPACK)/game/g_mem.o \
   $(B)/$(MISSIONPACK)/game/g_misc.o \
   $(B)/$(MISSIONPACK)/game/g_missile.o \
@@ -2458,6 +2499,7 @@ MPGOBJ_ = \
   $(B)/$(MISSIONPACK)/game/g_target.o \
   $(B)/$(MISSIONPACK)/game/g_team.o \
   $(B)/$(MISSIONPACK)/game/g_trigger.o \
+  $(B)/$(MISSIONPACK)/game/g_unlagged.o \
   $(B)/$(MISSIONPACK)/game/g_utils.o \
   $(B)/$(MISSIONPACK)/game/g_weapon.o \
   \

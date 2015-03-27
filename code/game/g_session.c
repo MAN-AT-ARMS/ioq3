@@ -180,6 +180,10 @@ G_WriteSessionData
 void G_WriteSessionData( void ) {
 	int		i;
 
+	if ( g_shuffle.integer ) {
+		G_shuffleTeams();
+	}
+
 	trap_Cvar_Set( "session", va("%i", g_gametype.integer) );
 
 	for ( i = 0 ; i < level.maxclients ; i++ ) {

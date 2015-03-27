@@ -83,7 +83,11 @@ void TeleportPlayer( gentity_t *player, vec3_t origin, vec3_t angles ) {
 	noAngles = (angles[0] > 999999.0);
 	// use temp events at source and destination to prevent the effect
 	// from getting dropped by a second player event
+/*freeze
 	if ( player->client->sess.sessionTeam != TEAM_SPECTATOR ) {
+freeze*/
+	if ( !is_spectator( player->client ) ) {
+//freeze
 		tent = G_TempEntity( player->client->ps.origin, EV_PLAYER_TELEPORT_OUT );
 		tent->s.clientNum = player->s.clientNum;
 
@@ -107,8 +111,20 @@ void TeleportPlayer( gentity_t *player, vec3_t origin, vec3_t angles ) {
 	}
 	// toggle the teleport bit so the client knows to not lerp
 	player->client->ps.eFlags ^= EF_TELEPORT_BIT;
+
+	//unlagged - backward reconciliation #3
+	if ( g_unlagged.integer ) {
+		// we don't want players being backward-reconciled back through teleporters
+		G_ResetHistory( player );
+	}
+	//unlagged - backward reconciliation #3
+
 	// kill anything at the destination
+/*freeze
 	if ( player->client->sess.sessionTeam != TEAM_SPECTATOR ) {
+freeze*/
+	if ( !is_spectator( player->client ) ) {
+//freeze
 		G_KillBox (player);
 	}
 
@@ -118,7 +134,11 @@ void TeleportPlayer( gentity_t *player, vec3_t origin, vec3_t angles ) {
 	// use the precise origin for linking
 	VectorCopy( player->client->ps.origin, player->r.currentOrigin );
 
+/*freeze
 	if ( player->client->sess.sessionTeam != TEAM_SPECTATOR ) {
+freeze*/
+	if ( !is_spectator( player->client ) ) {
+//freeze
 		trap_LinkEntity (player);
 	}
 }

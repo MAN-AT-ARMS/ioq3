@@ -99,6 +99,15 @@ qboolean CheckGauntletAttack( gentity_t *ent ) {
 		tent->s.weapon = ent->s.weapon;
 	}
 
+//freeze
+	if ( is_body( traceEnt ) ) {
+		tent = G_TempEntity( tr.endpos, EV_MISSILE_HIT );
+		tent->s.otherEntityNum = traceEnt->s.number;
+		tent->s.eventParm = DirToByte( tr.plane.normal );
+		tent->s.weapon = ent->s.weapon;
+	}
+//freeze
+
 	if ( !traceEnt->takedamage) {
 		return qfalse;
 	}
@@ -114,6 +123,12 @@ qboolean CheckGauntletAttack( gentity_t *ent ) {
 		s_quadFactor *= 2;
 	}
 #endif
+
+//freeze
+	if ( g_dmflags.integer & 1024 && !( g_weaponlimit.integer & 2048 ) ) {
+		s_quadFactor = 8;
+	}
+//freeze
 
 	damage = 50 * s_quadFactor;
 	G_Damage( traceEnt, ent, ent, forward, tr.endpos,
@@ -175,9 +190,20 @@ void Bullet_Fire (gentity_t *ent, float spread, int damage, int mod ) {
 
 	damage *= s_quadFactor;
 
-	r = random() * M_PI * 2.0f;
-	u = sin(r) * crandom() * spread * 16;
-	r = cos(r) * crandom() * spread * 16;
+	//unlagged - attack prediction #2
+	if ( g_unlagged.integer ) {
+		// we have to use something now that the client knows in advance
+		int	seed = ent->client->attackTime % 256;
+
+		r = Q_random(&seed) * M_PI * 2.0f;
+		u = sin(r) * Q_crandom(&seed) * spread * 16;
+		r = cos(r) * Q_crandom(&seed) * spread * 16;
+	} else {
+		r = random() * M_PI * 2.0f;
+		u = sin(r) * crandom() * spread * 16;
+		r = cos(r) * crandom() * spread * 16;
+	}
+	//unlagged - attack prediction #2
 	VectorMA (muzzle, 8192*16, forward, end);
 	VectorMA (end, r, right, end);
 	VectorMA (end, u, up, end);
@@ -185,7 +211,22 @@ void Bullet_Fire (gentity_t *ent, float spread, int damage, int mod ) {
 	passent = ent->s.number;
 	for (i = 0; i < 10; i++) {
 
+		//unlagged - backward reconciliation #2
+		if ( g_unlagged.integer ) {
+			// backward-reconcile the other clients
+			G_DoTimeShiftFor( ent );
+		}
+		//unlagged - backward reconciliation #2
+
 		trap_Trace (&tr, muzzle, NULL, NULL, end, passent, MASK_SHOT);
+
+		//unlagged - backward reconciliation #2
+		if ( g_unlagged.integer ) {
+			// put them back
+			G_UndoTimeShiftFor( ent );
+		}
+		//unlagged - backward reconciliation #2
+
 		if ( tr.surfaceFlags & SURF_NOIMPACT ) {
 			return;
 		}
@@ -199,12 +240,38 @@ void Bullet_Fire (gentity_t *ent, float spread, int damage, int mod ) {
 		if ( traceEnt->takedamage && traceEnt->client ) {
 			tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_FLESH );
 			tent->s.eventParm = traceEnt->s.number;
+			//unlagged - attack prediction #2
+			if ( g_unlagged.integer ) {
+				// we need the client number to determine whether or not to
+				// suppress this event
+				tent->s.clientNum = ent->s.clientNum;
+			}
+			//unlagged - attack prediction #2
 			if( LogAccuracyHit( traceEnt, ent ) ) {
 				ent->client->accuracy_hits++;
 			}
+//freeze
+		} else if ( is_body( traceEnt ) ) {
+			tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_FLESH );
+			tent->s.eventParm = traceEnt->s.number;
+			//unlagged - attack prediction #2
+			if ( g_unlagged.integer ) {
+				// we need the client number to determine whether or not to
+				// suppress this event
+				tent->s.clientNum = ent->s.clientNum;
+			}
+			//unlagged - attack prediction #2
+//freeze
 		} else {
 			tent = G_TempEntity( tr.endpos, EV_BULLET_HIT_WALL );
 			tent->s.eventParm = DirToByte( tr.plane.normal );
+			//unlagged - attack prediction #2
+			if ( g_unlagged.integer ) {
+				// we need the client number to determine whether or not to
+				// suppress this event
+				tent->s.clientNum = ent->s.clientNum;
+			}
+			//unlagged - attack prediction #2
 		}
 		tent->s.otherEntityNum = ent->s.number;
 
@@ -331,11 +398,25 @@ void ShotgunPattern( vec3_t origin, vec3_t origin2, int seed, gentity_t *ent ) {
 	vec3_t		forward, right, up;
 	qboolean	hitClient = qfalse;
 
+	//unlagged - attack prediction #2
+	if ( g_unlagged.integer ) {
+		// use this for testing
+		//Com_Printf( "Server seed: %d\n", seed );
+	}
+	//unlagged - attack prediction #2
+
 	// derive the right and up vectors from the forward vector, because
 	// the client won't have any other information
 	VectorNormalize2( origin2, forward );
 	PerpendicularVector( right, forward );
 	CrossProduct( forward, right, up );
+
+	//unlagged - backward reconciliation #2
+	if ( g_unlagged.integer ) {
+		// backward-reconcile the other clients
+		G_DoTimeShiftFor( ent );
+	}
+	//unlagged - backward reconciliation #2
 
 	// generate the "random" spread pattern
 	for ( i = 0 ; i < DEFAULT_SHOTGUN_COUNT ; i++ ) {
@@ -349,6 +430,13 @@ void ShotgunPattern( vec3_t origin, vec3_t origin2, int seed, gentity_t *ent ) {
 			ent->client->accuracy_hits++;
 		}
 	}
+
+	//unlagged - backward reconciliation #2
+	if ( g_unlagged.integer ) {
+		// put them back
+		G_UndoTimeShiftFor( ent );
+	}
+	//unlagged - backward reconciliation #2
 }
 
 
@@ -359,7 +447,14 @@ void weapon_supershotgun_fire (gentity_t *ent) {
 	tent = G_TempEntity( muzzle, EV_SHOTGUN );
 	VectorScale( forward, 4096, tent->s.origin2 );
 	SnapVector( tent->s.origin2 );
-	tent->s.eventParm = rand() & 255;		// seed for spread pattern
+	//unlagged - attack prediction #2
+	// this has to be something the client can predict now
+	if ( g_unlagged.integer ) {
+		tent->s.eventParm = ent->client->attackTime % 256; // seed for spread pattern
+	} else {
+		tent->s.eventParm = rand() & 255;		// seed for spread pattern
+	}
+	//unlagged - attack prediction #2
 	tent->s.otherEntityNum = ent->s.number;
 
 	ShotgunPattern( tent->s.pos.trBase, tent->s.origin2, tent->s.eventParm, ent );
@@ -459,6 +554,13 @@ void weapon_railgun_fire (gentity_t *ent) {
 
 	VectorMA (muzzle, 8192, forward, end);
 
+	//unlagged - backward reconciliation #2
+	if ( g_unlagged.integer ) {
+		// backward-reconcile the other clients
+		G_DoTimeShiftFor( ent );
+	}
+	//unlagged - backward reconciliation #2
+
 	// trace only against the solids, so the railgun will go through people
 	unlinked = 0;
 	hits = 0;
@@ -503,6 +605,23 @@ void weapon_railgun_fire (gentity_t *ent) {
 				}
 				G_Damage (traceEnt, ent, ent, forward, trace.endpos, damage, 0, MOD_RAILGUN);
 #endif
+/*freeze
+			if ( is_body_freeze( traceEnt ) && level.time - traceEnt->timestamp > 400 ) {
+				if ( InvulnerabilityEffect( traceEnt, forward, trace.endpos, impactpoint, bouncedir ) ) {
+					G_BounceProjectile( muzzle, impactpoint, bouncedir, end );
+					SnapVectorTowards( trace.endpos, muzzle );
+					tent = G_TempEntity( trace.endpos, EV_RAILTRAIL );
+					tent->s.clientNum = ent->s.clientNum;
+					VectorCopy( muzzle, tent->s.origin2 );
+					VectorMA( tent->s.origin2, 4, right, tent->s.origin2 );
+					VectorMA( tent->s.origin2, -1, up, tent->s.origin2 );
+					tent->s.eventParm = 255;
+
+					VectorCopy( impactpoint, muzzle );
+					passent = ENTITYNUM_NONE;
+				}
+			}
+freeze*/
 		}
 		if ( trace.contents & CONTENTS_SOLID ) {
 			break;		// we hit something solid enough to stop the beam
@@ -512,6 +631,13 @@ void weapon_railgun_fire (gentity_t *ent) {
 		unlinkedEntities[unlinked] = traceEnt;
 		unlinked++;
 	} while ( unlinked < MAX_RAIL_HITS );
+
+	//unlagged - backward reconciliation #2
+	if ( g_unlagged.integer ) {
+		// put them back
+		G_UndoTimeShiftFor( ent );
+	}
+	//unlagged - backward reconciliation #2
 
 	// link back in any entities we unlinked
 	for ( i = 0 ; i < unlinked ; i++ ) {
@@ -573,6 +699,10 @@ GRAPPLING HOOK
 
 void Weapon_GrapplingHook_Fire (gentity_t *ent)
 {
+//freeze
+	AngleVectors( ent->client->ps.viewangles, forward, right, up );
+	CalcMuzzlePoint( ent, forward, right, up, muzzle );
+//freeze
 	if (!ent->client->fireHeld && !ent->client->hook)
 		fire_grapple (ent, muzzle, forward);
 
@@ -581,6 +711,9 @@ void Weapon_GrapplingHook_Fire (gentity_t *ent)
 
 void Weapon_HookFree (gentity_t *ent)
 {
+//freeze
+	ent->parent->timestamp = level.time;
+//freeze
 	ent->parent->client->hook = NULL;
 	ent->parent->client->ps.pm_flags &= ~PMF_GRAPPLE_PULL;
 	G_FreeEntity( ent );
@@ -620,13 +753,34 @@ void Weapon_LightningFire( gentity_t *ent ) {
 	gentity_t	*traceEnt, *tent;
 	int			damage, i, passent;
 
-	damage = 8 * s_quadFactor;
+	//unlagged - server options
+	if ( g_unlagged.integer ) {
+		// this is configurable now
+		damage = g_lightningDamage.integer * s_quadFactor;
+	} else {
+		damage = 8 * s_quadFactor;
+	}
+	//unlagged - server options
 
 	passent = ent->s.number;
 	for (i = 0; i < 10; i++) {
 		VectorMA( muzzle, LIGHTNING_RANGE, forward, end );
 
+		//unlagged - backward reconciliation #2
+		if ( g_unlagged.integer ) {
+			// backward-reconcile the other clients
+			G_DoTimeShiftFor( ent );
+		}
+		//unlagged - backward reconciliation #2
+
 		trap_Trace( &tr, muzzle, NULL, NULL, end, passent, MASK_SHOT );
+
+		//unlagged - backward reconciliation #2
+		if ( g_unlagged.integer ) {
+			// put them back
+			G_UndoTimeShiftFor( ent );
+		}
+		//unlagged - backward reconciliation #2
 
 #ifdef MISSIONPACK
 		// if not the first trace (the lightning bounced of an invulnerability sphere)
@@ -681,6 +835,13 @@ void Weapon_LightningFire( gentity_t *ent ) {
 			if( LogAccuracyHit( traceEnt, ent ) ) {
 				ent->client->accuracy_hits++;
 			}
+//freeze
+		} else if ( is_body( traceEnt ) ) {
+			tent = G_TempEntity( tr.endpos, EV_MISSILE_HIT );
+			tent->s.otherEntityNum = traceEnt->s.number;
+			tent->s.eventParm = DirToByte( tr.plane.normal );
+			tent->s.weapon = ent->s.weapon;
+//freeze
 		} else if ( !( tr.surfaceFlags & SURF_NOIMPACT ) ) {
 			tent = G_TempEntity( tr.endpos, EV_MISSILE_MISS );
 			tent->s.eventParm = DirToByte( tr.plane.normal );
@@ -822,6 +983,12 @@ void FireWeapon( gentity_t *ent ) {
 		s_quadFactor *= 2;
 	}
 #endif
+
+//freeze
+	if ( g_dmflags.integer & 1024 ) {
+		s_quadFactor = 8;
+	}
+//freeze
 
 	// track shots taken for accuracy tracking.  Grapple is not a weapon and gauntet is just not tracked
 	if( ent->s.weapon != WP_GRAPPLING_HOOK && ent->s.weapon != WP_GAUNTLET ) {

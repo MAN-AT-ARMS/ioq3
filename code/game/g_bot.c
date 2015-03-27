@@ -395,8 +395,8 @@ void G_CheckMinimumPlayers( void ) {
 	static int checkminimumplayers_time;
 
 	if (level.intermissiontime) return;
-	//only check once each 10 seconds
-	if (checkminimumplayers_time > level.time - 10000) {
+	//only check once each 3 seconds
+	if (checkminimumplayers_time > level.time - 3000) {
 		return;
 	}
 	checkminimumplayers_time = level.time;

@@ -805,6 +805,14 @@ void Blocked_Door( gentity_t *ent, gentity_t *other ) {
 			Team_DroppedFlagThink( other );
 			return;
 		}
+
+//freeze
+		if ( is_body( other ) ) {
+			Body_free( other );
+			return;
+		}
+//freeze
+
 		G_TempEntity( other->s.origin, EV_ITEM_POP );
 		G_FreeEntity( other );
 		return;
@@ -855,7 +863,11 @@ Touch_DoorTrigger
 ================
 */
 void Touch_DoorTrigger( gentity_t *ent, gentity_t *other, trace_t *trace ) {
+/*freeze
 	if ( other->client && other->client->sess.sessionTeam == TEAM_SPECTATOR ) {
+freeze*/
+	if ( other->client && is_spectator( other->client ) ) {
+//freeze
 		// if the door is not open and not opening
 		if ( ent->parent->moverState != MOVER_1TO2 &&
 			ent->parent->moverState != MOVER_POS2) {

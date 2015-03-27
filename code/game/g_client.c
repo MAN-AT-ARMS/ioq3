@@ -118,13 +118,29 @@ gentity_t *SelectNearestDeathmatchSpawnPoint( vec3_t from ) {
 	nearestSpot = NULL;
 	spot = NULL;
 
-	while ((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL) {
+	while ((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL &&
+		(spot = G_Find (spot, FOFS(arena), va("%s", g_arena.string))) != NULL)
+	{
 
 		VectorSubtract( spot->s.origin, from, delta );
 		dist = VectorLength( delta );
 		if ( dist < nearestDist ) {
 			nearestDist = dist;
 			nearestSpot = spot;
+		}
+	}
+
+	if ( !nearestSpot )
+	{
+		while ((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL)
+		{
+
+			VectorSubtract( spot->s.origin, from, delta );
+			dist = VectorLength( delta );
+			if ( dist < nearestDist ) {
+				nearestDist = dist;
+				nearestSpot = spot;
+			}
 		}
 	}
 
@@ -149,7 +165,9 @@ gentity_t *SelectRandomDeathmatchSpawnPoint(qboolean isbot) {
 	count = 0;
 	spot = NULL;
 
-	while((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL && count < MAX_SPAWN_POINTS)
+	while((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL &&
+		(spot = G_Find (spot, FOFS(arena), va("%s", g_arena.string))) != NULL &&
+		count < MAX_SPAWN_POINTS)
 	{
 		if(SpotWouldTelefrag(spot))
 			continue;
@@ -165,9 +183,27 @@ gentity_t *SelectRandomDeathmatchSpawnPoint(qboolean isbot) {
 		count++;
 	}
 
-	if ( !count ) {	// no spots that won't telefrag
-		return G_Find( NULL, FOFS(classname), "info_player_deathmatch");
+	if ( !count )
+	{
+		while((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL && count < MAX_SPAWN_POINTS)
+		{
+			if(SpotWouldTelefrag(spot))
+				continue;
+
+			if(((spot->flags & FL_NO_BOTS) && isbot) ||
+			   ((spot->flags & FL_NO_HUMANS) && !isbot))
+			{
+				// spot is not for this human/bot player
+				continue;
+			}
+
+			spots[count] = spot;
+			count++;
+		}
 	}
+
+	if ( !count )	// no spots that won't telefrag
+		return G_Find( NULL, FOFS(classname), "info_player_deathmatch");
 
 	selection = rand() % count;
 	return spots[ selection ];
@@ -191,8 +227,10 @@ gentity_t *SelectRandomFurthestSpawnPoint ( vec3_t avoidPoint, vec3_t origin, ve
 	numSpots = 0;
 	spot = NULL;
 
-	while((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL)
+	while((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL &&
+		(spot = G_Find (spot, FOFS(arena), va("%s", g_arena.string))) != NULL)
 	{
+
 		if(SpotWouldTelefrag(spot))
 			continue;
 
@@ -232,6 +270,53 @@ gentity_t *SelectRandomFurthestSpawnPoint ( vec3_t avoidPoint, vec3_t origin, ve
 			list_dist[numSpots] = dist;
 			list_spot[numSpots] = spot;
 			numSpots++;
+		}
+	}
+
+	if (!numSpots)
+	{
+		while((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL)
+		{
+			if(SpotWouldTelefrag(spot))
+				continue;
+
+			if(((spot->flags & FL_NO_BOTS) && isbot) ||
+			   ((spot->flags & FL_NO_HUMANS) && !isbot))
+			{
+				// spot is not for this human/bot player
+				continue;
+			}
+
+			VectorSubtract( spot->s.origin, avoidPoint, delta );
+			dist = VectorLength( delta );
+
+			for (i = 0; i < numSpots; i++)
+			{
+				if(dist > list_dist[i])
+				{
+					if (numSpots >= MAX_SPAWN_POINTS)
+						numSpots = MAX_SPAWN_POINTS - 1;
+					
+					for(j = numSpots; j > i; j--)
+					{
+						list_dist[j] = list_dist[j-1];
+						list_spot[j] = list_spot[j-1];
+					}
+				
+					list_dist[i] = dist;
+					list_spot[i] = spot;
+				
+					numSpots++;
+					break;
+				}
+			}
+		
+			if(i >= numSpots && numSpots < MAX_SPAWN_POINTS)
+			{
+				list_dist[numSpots] = dist;
+				list_spot[numSpots] = spot;
+				numSpots++;
+			}
 		}
 	}
 	
@@ -310,7 +395,8 @@ gentity_t *SelectInitialSpawnPoint( vec3_t origin, vec3_t angles, qboolean isbot
 
 	spot = NULL;
 	
-	while ((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL)
+	while ((spot = G_Find (spot, FOFS(classname), "info_player_deathmatch")) != NULL &&
+		(spot = G_Find (spot, FOFS(arena), va("%s", g_arena.string))) != NULL)
 	{
 		if(((spot->flags & FL_NO_BOTS) && isbot) ||
 		   ((spot->flags & FL_NO_HUMANS) && !isbot))
@@ -528,6 +614,10 @@ ClientRespawn
 ================
 */
 void ClientRespawn( gentity_t *ent ) {
+//freeze
+	if ( Set_spectator( ent ) )
+		return;
+//freeze
 
 	CopyToBodyQue (ent);
 	ClientSpawn(ent);
@@ -590,7 +680,7 @@ PickTeam
 ================
 */
 team_t PickTeam( int ignoreClientNum ) {
-	int		counts[TEAM_NUM_TEAMS];
+	int		counts[TEAM_NUM_TEAMS] = { 0 };
 
 	counts[TEAM_BLUE] = TeamCount( ignoreClientNum, TEAM_BLUE );
 	counts[TEAM_RED] = TeamCount( ignoreClientNum, TEAM_RED );
@@ -739,6 +829,43 @@ void ClientUserinfoChanged( int clientNum ) {
 	} else {
 		client->pers.predictItemPickup = qtrue;
 	}
+
+	//unlagged - client options
+	if (g_unlagged.integer) {
+		// see if the player has opted out
+		s = Info_ValueForKey( userinfo, "cg_delag" );
+		if ( !atoi( s ) ) {
+			client->pers.delag = 0;
+		} else {
+			client->pers.delag = atoi( s );
+		}
+
+		// see if the player is nudging his shots
+		s = Info_ValueForKey( userinfo, "cg_cmdTimeNudge" );
+		client->pers.cmdTimeNudge = atoi( s );
+
+		// see if the player wants to debug the backward reconciliation
+		s = Info_ValueForKey( userinfo, "cg_debugDelag" );
+		if ( !atoi( s ) ) {
+			client->pers.debugDelag = qfalse;
+		}
+		else {
+			client->pers.debugDelag = qtrue;
+		}
+
+		// see if the player is simulating incoming latency
+		s = Info_ValueForKey( userinfo, "cg_latentSnaps" );
+		client->pers.latentSnaps = atoi( s );
+
+		// see if the player is simulating outgoing latency
+		s = Info_ValueForKey( userinfo, "cg_latentCmds" );
+		client->pers.latentCmds = atoi( s );
+
+		// see if the player is simulating outgoing packet loss
+		s = Info_ValueForKey( userinfo, "cg_plOut" );
+		client->pers.plOut = atoi( s );
+	}
+	//unlagged - client options
 
 	// set name
 	Q_strncpyz ( oldname, client->pers.netname, sizeof( oldname ) );
@@ -956,11 +1083,21 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 
 	client->pers.connected = CON_CONNECTING;
 
+	client->pers.connectTime = level.time;			// DHM - Nerve
+
 	// read or initialize the session data
 	if ( firstTime || level.newSession ) {
 		G_InitSessionData( client, userinfo );
 	}
 	G_ReadSessionData( client );
+
+//freeze
+	if ( g_gametype.integer != GT_TOURNAMENT ) {
+		client->sess.wins = 0;
+	}
+	ent->freezeState = qfalse;
+	ent->readyBegin = qfalse;
+//freeze
 
 	if( isBot ) {
 		ent->r.svFlags |= SVF_BOT;
@@ -991,6 +1128,18 @@ char *ClientConnect( int clientNum, qboolean firstTime, qboolean isBot ) {
 //	client->areabits = areabits;
 //	if ( !client->areabits )
 //		client->areabits = G_Alloc( (trap_AAS_PointReachabilityAreaIndex( NULL ) + 7) / 8 );
+
+	//unlagged - backward reconciliation #5
+	if ( g_unlagged.integer ) {
+		// announce it
+		if ( g_delagHitscan.integer ) {
+			trap_SendServerCommand( clientNum, "print \"^3This server is Unlagged^7: ^3Full lag compensation is ^2ON^7\n\"" );
+		}
+		else {
+			trap_SendServerCommand( clientNum, "print \"^3This server is Unlagged^7: ^3Full lag compensation is ^1OFF^7\n\"" );
+		}
+	}
+	//unlagged - backward reconciliation #5
 
 	return NULL;
 }
@@ -1039,10 +1188,23 @@ void ClientBegin( int clientNum ) {
 
 	if ( client->sess.sessionTeam != TEAM_SPECTATOR ) {
 		if ( g_gametype.integer != GT_TOURNAMENT  ) {
-			trap_SendServerCommand( -1, va("print \"%s" S_COLOR_WHITE " entered the game\n\"", client->pers.netname) );
+			if ( client->sess.sessionTeam == TEAM_BLUE ) {
+				trap_SendServerCommand( -1, va("print \"%s" S_COLOR_WHITE " entered the game (" S_COLOR_BLUE "BLUE" S_COLOR_WHITE ")\n\"", client->pers.netname) );
+			} else if ( client->sess.sessionTeam == TEAM_RED ) {
+				trap_SendServerCommand( -1, va("print \"%s" S_COLOR_WHITE " entered the game (" S_COLOR_RED "RED" S_COLOR_WHITE ")\n\"", client->pers.netname) );
+			} else {
+				trap_SendServerCommand( -1, va("print \"%s" S_COLOR_WHITE " entered the game\n\"", client->pers.netname) );
+			}
 		}
 	}
 	G_LogPrintf( "ClientBegin: %i\n", clientNum );
+
+	if ( g_startFrozen.integer ) {
+		if ( !(ent->r.svFlags & SVF_BOT) ) { // Don't start bots frozen
+			if ( level.time > client->pers.connectTime && level.warmupTime == 0 )
+				player_freeze( ent, ent, MOD_BFG_SPLASH );
+		}
+	}
 
 	// count current clients and rank for scoreboard
 	CalculateRanks();
@@ -1119,6 +1281,15 @@ void ClientSpawn(gentity_t *ent) {
 	// and never clear the voted flag
 	flags = ent->client->ps.eFlags & (EF_TELEPORT_BIT | EF_VOTED | EF_TEAMVOTED);
 	flags ^= EF_TELEPORT_BIT;
+
+	//unlagged - backward reconciliation #3
+	if ( g_unlagged.integer ) {
+		// we don't want players being backward-reconciled to the place they died
+		G_ResetHistory( ent );
+		// and this is as good a time as any to clear the saved state
+		ent->client->saved.leveltime = 0;
+	}
+	//unlagged - backward reconciliation #3
 
 	// clear everything but the persistant data
 
@@ -1215,13 +1386,26 @@ void ClientSpawn(gentity_t *ent) {
 	client->ps.legsAnim = LEGS_IDLE;
 
 	if (!level.intermissiontime) {
+/*freeze
 		if (ent->client->sess.sessionTeam != TEAM_SPECTATOR) {
+freeze*/
+		if ( !is_spectator( client ) ) {
+//freeze
 			G_KillBox(ent);
 			// force the base weapon up
 			client->ps.weapon = WP_MACHINEGUN;
 			client->ps.weaponstate = WEAPON_READY;
+
+//freeze
+			SpawnWeapon( client );
+//freeze
+
 			// fire the targets of the spawn point
+//freeze
+			if ( !( g_dmflags.integer & 1024 ) )
+//freeze
 			G_UseTargets(spawnPoint, ent);
+
 			// select the highest weapon number available, after any spawn given items have fired
 			client->ps.weapon = 1;
 
@@ -1231,6 +1415,20 @@ void ClientSpawn(gentity_t *ent) {
 					break;
 				}
 			}
+
+//freeze
+			if ( client->ps.stats[ STAT_WEAPONS ] & ( 1 << WP_ROCKET_LAUNCHER ) ) {
+				client->ps.weapon = WP_ROCKET_LAUNCHER;
+			}
+
+			if ( g_startArmor.integer > 0 ) {
+				client->ps.stats[ STAT_ARMOR ] += g_startArmor.integer;
+				if ( client->ps.stats[ STAT_ARMOR ] > client->ps.stats[ STAT_MAX_HEALTH ] * 2 ) {
+					client->ps.stats[ STAT_ARMOR ] = client->ps.stats[ STAT_MAX_HEALTH ] * 2;
+				}
+			}
+//freeze
+
 			// positively link the client, even if the command times are weird
 			VectorCopy(ent->client->ps.origin, ent->r.currentOrigin);
 
@@ -1243,6 +1441,7 @@ void ClientSpawn(gentity_t *ent) {
 		// move players to intermission
 		MoveClientToIntermission(ent);
 	}
+
 	// run a client frame to drop exactly to the floor,
 	// initialize animations and other things
 	client->ps.commandTime = level.time - 100;
@@ -1287,7 +1486,11 @@ void ClientDisconnect( int clientNum ) {
 
 	// stop any following clients
 	for ( i = 0 ; i < level.maxclients ; i++ ) {
+/*freeze
 		if ( level.clients[i].sess.sessionTeam == TEAM_SPECTATOR
+freeze*/
+		if ( is_spectator( &level.clients[ i ] )
+//freeze
 			&& level.clients[i].sess.spectatorState == SPECTATOR_FOLLOW
 			&& level.clients[i].sess.spectatorClient == clientNum ) {
 			StopFollowing( &g_entities[i] );
@@ -1296,7 +1499,11 @@ void ClientDisconnect( int clientNum ) {
 
 	// send effect if they were completely connected
 	if ( ent->client->pers.connected == CON_CONNECTED 
+/*freeze
 		&& ent->client->sess.sessionTeam != TEAM_SPECTATOR ) {
+freeze*/
+		&& !is_spectator( ent->client ) ) {
+//freeze
 		tent = G_TempEntity( ent->client->ps.origin, EV_PLAYER_TELEPORT_OUT );
 		tent->s.clientNum = ent->s.clientNum;
 

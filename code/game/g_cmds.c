@@ -55,7 +55,13 @@ void DeathmatchScoreboardMessage( gentity_t *ent ) {
 		if ( cl->pers.connected == CON_CONNECTING ) {
 			ping = -1;
 		} else {
-			ping = cl->ps.ping < 999 ? cl->ps.ping : 999;
+			//unlagged - true ping
+			if ( g_unlagged.integer ) {
+				ping = cl->pers.realPing < 999 ? cl->pers.realPing : 999;
+			} else {
+				ping = cl->ps.ping < 999 ? cl->ps.ping : 999;
+			}
+			//unlagged - true ping
 		}
 
 		if( cl->accuracy_shots ) {
@@ -65,6 +71,10 @@ void DeathmatchScoreboardMessage( gentity_t *ent ) {
 			accuracy = 0;
 		}
 		perfect = ( cl->ps.persistant[PERS_RANK] == 0 && cl->ps.persistant[PERS_KILLED] == 0 ) ? 1 : 0;
+
+//freeze
+		scoreFlags = cl->sess.wins;
+//freeze
 
 		Com_sprintf (entry, sizeof(entry),
 			" %i %i %i %i %i %i %i %i %i %i %i %i %i %i", level.sortedClients[i],
@@ -101,7 +111,11 @@ void Cmd_Score_f( gentity_t *ent ) {
 	DeathmatchScoreboardMessage( ent );
 }
 
-
+// OSP
+// Shows match stats to the requesting client.
+void G_scores_cmd( gentity_t *ent ) {
+	G_printMatchInfo( ent );
+}
 
 /*
 ==================
@@ -178,6 +192,33 @@ qboolean StringIsInteger( const char * s ) {
 	return foundDigit;
 }
 
+/*
+==================
+SanitizeString
+
+Remove case and control characters
+==================
+*/
+void SanitizeString( char *in, char *out, qboolean fToLower ) {
+	while ( *in ) {
+		if ( *in == 27 || *in == '^' ) {
+			in++;       // skip color code
+			if ( *in ) {
+				in++;
+			}
+			continue;
+		}
+
+		if ( *in < 32 ) {
+			in++;
+			continue;
+		}
+
+		*out++ = ( fToLower ) ? tolower( *in++ ) : *in++;
+	}
+
+	*out = 0;
+}
 
 /*
 ==================
@@ -463,7 +504,11 @@ Cmd_Kill_f
 =================
 */
 void Cmd_Kill_f( gentity_t *ent ) {
+/*freeze
 	if ( ent->client->sess.sessionTeam == TEAM_SPECTATOR ) {
+freeze*/
+	if ( is_spectator( ent->client ) ) {
+//freeze
 		return;
 	}
 	if (ent->health <= 0) {
@@ -471,7 +516,11 @@ void Cmd_Kill_f( gentity_t *ent ) {
 	}
 	ent->flags &= ~FL_GODMODE;
 	ent->client->ps.stats[STAT_HEALTH] = ent->health = -999;
+/*freeze
 	player_die (ent, ent, ent, 100000, MOD_SUICIDE);
+freeze*/
+	player_die( ent, ent, ent, 100000, MOD_BFG_SPLASH );
+//freeze
 }
 
 /*
@@ -484,10 +533,10 @@ Let everyone know about a team change
 void BroadcastTeamChange( gclient_t *client, int oldTeam )
 {
 	if ( client->sess.sessionTeam == TEAM_RED ) {
-		trap_SendServerCommand( -1, va("cp \"%s" S_COLOR_WHITE " joined the red team.\n\"",
+		trap_SendServerCommand( -1, va("cp \"%s" S_COLOR_WHITE " joined the " S_COLOR_RED "RED " S_COLOR_WHITE "team.\n\"",
 			client->pers.netname) );
 	} else if ( client->sess.sessionTeam == TEAM_BLUE ) {
-		trap_SendServerCommand( -1, va("cp \"%s" S_COLOR_WHITE " joined the blue team.\n\"",
+		trap_SendServerCommand( -1, va("cp \"%s" S_COLOR_WHITE " joined the " S_COLOR_BLUE "BLUE " S_COLOR_WHITE "team.\n\"",
 		client->pers.netname));
 	} else if ( client->sess.sessionTeam == TEAM_SPECTATOR && oldTeam != TEAM_SPECTATOR ) {
 		trap_SendServerCommand( -1, va("cp \"%s" S_COLOR_WHITE " joined the spectators.\n\"",
@@ -636,6 +685,7 @@ void SetTeam( gentity_t *ent, char *s ) {
 	ClientBegin( clientNum );
 }
 
+
 /*
 =================
 StopFollowing
@@ -645,8 +695,14 @@ to free floating spectator mode
 =================
 */
 void StopFollowing( gentity_t *ent ) {
-	ent->client->ps.persistant[ PERS_TEAM ] = TEAM_SPECTATOR;	
-	ent->client->sess.sessionTeam = TEAM_SPECTATOR;	
+	ent->client->ps.persistant[ PERS_TEAM ] = TEAM_SPECTATOR;
+/*freeze
+	ent->client->sess.sessionTeam = TEAM_SPECTATOR;
+freeze*/
+	SetClientViewAngle( ent, ent->client->ps.viewangles );
+	ent->client->ps.stats[ STAT_HEALTH ] = ent->health = 100;
+	memset( ent->client->ps.powerups, 0, sizeof ( ent->client->ps.powerups ) );
+//freeze
 	ent->client->sess.spectatorState = SPECTATOR_FREE;
 	ent->client->ps.pm_flags &= ~PMF_FOLLOW;
 	ent->r.svFlags &= ~SVF_BOT;
@@ -699,6 +755,15 @@ void Cmd_Team_f( gentity_t *ent ) {
 		ent->client->sess.losses++;
 	}
 
+//freeze
+	if ( ent->freezeState ) {
+		if ( ent->client->sess.spectatorState == SPECTATOR_FOLLOW ) {
+			StopFollowing( ent );
+		}
+		return;
+	}
+//freeze
+
 	trap_Argv( 1, s, sizeof( s ) );
 
 	SetTeam( ent, s );
@@ -735,7 +800,14 @@ void Cmd_Follow_f( gentity_t *ent ) {
 	}
 
 	// can't follow another spectator
+//freeze
+	if ( ent->freezeState && !is_spectator( ent->client ) )
+		return;
+//	if ( ent->client->sess.sessionTeam != TEAM_SPECTATOR && level.clients[ i ].sess.sessionTeam != ent->client->sess.sessionTeam ) return;
+	if ( is_spectator( &level.clients[ i ] ) ) {
+/*freeze
 	if ( level.clients[ i ].sess.sessionTeam == TEAM_SPECTATOR ) {
+freeze*/
 		return;
 	}
 
@@ -762,6 +834,13 @@ Cmd_FollowCycle_f
 void Cmd_FollowCycle_f( gentity_t *ent, int dir ) {
 	int		clientnum;
 	int		original;
+
+//freeze
+	if ( ent->freezeState && !is_spectator( ent->client ) )
+		return;
+	if ( Set_Client( ent ) )
+		return;
+//freeze
 
 	// if they are playing a tournement game, count as a loss
 	if ( (g_gametype.integer == GT_TOURNAMENT )
@@ -804,7 +883,22 @@ void Cmd_FollowCycle_f( gentity_t *ent, int dir ) {
 		}
 
 		// can't follow another spectator
+//freeze
+		if ( &level.clients[ clientnum ] == ent->client ) {
+			if ( ent->client->sess.spectatorState == SPECTATOR_FOLLOW ) {
+				StopFollowing( ent );
+				ent->client->ps.pm_flags |= PMF_TIME_KNOCKBACK;
+				ent->client->ps.pm_time = 100;
+				return;
+			}
+		}
+		if ( g_entities[ clientnum ].freezeState )
+			continue;
+//		if ( ent->client->sess.sessionTeam != TEAM_SPECTATOR && level.clients[ clientnum ].sess.sessionTeam != ent->client->sess.sessionTeam ) continue;
+		if ( is_spectator( &level.clients[ clientnum ] ) ) {
+/*freeze
 		if ( level.clients[ clientnum ].sess.sessionTeam == TEAM_SPECTATOR ) {
+freeze*/
 			continue;
 		}
 
@@ -1298,17 +1392,35 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 	if ( !Q_stricmp( arg1, "map_restart" ) ) {
 	} else if ( !Q_stricmp( arg1, "nextmap" ) ) {
 	} else if ( !Q_stricmp( arg1, "map" ) ) {
+	} else if ( !Q_stricmp( arg1, "g_arena" ) ) {
 	} else if ( !Q_stricmp( arg1, "g_gametype" ) ) {
 	} else if ( !Q_stricmp( arg1, "kick" ) ) {
 	} else if ( !Q_stricmp( arg1, "clientkick" ) ) {
 	} else if ( !Q_stricmp( arg1, "g_doWarmup" ) ) {
 	} else if ( !Q_stricmp( arg1, "timelimit" ) ) {
 	} else if ( !Q_stricmp( arg1, "fraglimit" ) ) {
+//freeze
+	} else if ( !Q_stricmp( arg1, "g_grapple" ) ) {
+//freeze
 	} else {
+//freeze
+		if ( g_votelimit.integer ) {
+			voteInvalid( ent );
+		} else {
+//freeze
 		trap_SendServerCommand( ent-g_entities, "print \"Invalid vote string.\n\"" );
-		trap_SendServerCommand( ent-g_entities, "print \"Vote commands are: map_restart, nextmap, map <mapname>, g_gametype <n>, kick <player>, clientkick <clientnum>, g_doWarmup, timelimit <time>, fraglimit <frags>.\n\"" );
+		trap_SendServerCommand( ent-g_entities, "print \"Vote commands are: map_restart, nextmap, map <mapname>, g_arena <n>, g_gametype <n>, kick <player>, clientkick <clientnum>, g_doWarmup, timelimit <time>, fraglimit <frags>.\n\"" );
+//freeze
+		}
+//freeze
 		return;
 	}
+//freeze
+	if ( voteCheck() ) {
+		voteInvalid( ent );
+		return;
+	}
+//freeze
 
 	// if there is still a vote to be executed
 	if ( level.voteExecuteTime ) {
@@ -1316,8 +1428,17 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		trap_SendConsoleCommand( EXEC_APPEND, va("%s\n", level.voteString ) );
 	}
 
-	// special case for g_gametype, check for bad values
-	if ( !Q_stricmp( arg1, "g_gametype" ) ) {
+	if ( !Q_stricmp( arg1, "g_arena" ) ) {
+		i = atoi( arg2 );
+		if( i <= 0 || i > 5 ) {
+			trap_SendServerCommand( ent-g_entities, "print \"Invalid arena.\n\"" );
+			return;
+		}
+
+		Com_sprintf( level.voteString, sizeof( level.voteString ), "set \"%s\" \"%d\"; map_restart", arg1, i );
+		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s %d", arg1, i );
+	} else if ( !Q_stricmp( arg1, "g_gametype" ) ) {
+		// special case for g_gametype, check for bad values
 		i = atoi( arg2 );
 		if( i == GT_SINGLE_PLAYER || i < GT_FFA || i >= GT_MAX_GAME_TYPE) {
 			trap_SendServerCommand( ent-g_entities, "print \"Invalid gametype.\n\"" );
@@ -1704,6 +1825,7 @@ void ClientCommand( int clientNum ) {
 		Cmd_Score_f (ent);
 		return;
 	}
+	
 
 	// ignore all other commands when at intermission
 	if (level.intermissiontime) {
@@ -1748,7 +1870,17 @@ void ClientCommand( int clientNum ) {
 	else if (Q_stricmp (cmd, "setviewpos") == 0)
 		Cmd_SetViewpos_f( ent );
 	else if (Q_stricmp (cmd, "stats") == 0)
-		Cmd_Stats_f( ent );
+//		Cmd_Stats_f( ent );
+		G_scores_cmd( ent );
+	else if (Q_stricmp (cmd, "getstatsinfo") == 0)
+		// OSP Stub
+		return;
+//freeze
+	else if ( Q_stricmp( cmd, "drop" ) == 0 )
+		Cmd_Drop_f( ent );
+	else if ( Q_stricmp( cmd, "ready" ) == 0 )
+		Cmd_Ready_f( ent );
+//freeze
 	else
 		trap_SendServerCommand( clientNum, va("print \"unknown cmd %s\n\"", cmd ) );
 }

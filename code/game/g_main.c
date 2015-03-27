@@ -74,6 +74,7 @@ vmCvar_t	g_podiumDrop;
 vmCvar_t	g_allowVote;
 vmCvar_t	g_teamAutoJoin;
 vmCvar_t	g_teamForceBalance;
+vmCvar_t	g_shuffle;
 vmCvar_t	g_banIPs;
 vmCvar_t	g_filterBan;
 vmCvar_t	g_smoothClients;
@@ -93,7 +94,37 @@ vmCvar_t	g_singlePlayer;
 vmCvar_t	g_enableDust;
 vmCvar_t	g_enableBreath;
 vmCvar_t	g_proxMineTimeout;
+//freeze
+#else
+vmCvar_t	g_enableBreath;
+//freeze
 #endif
+
+//freeze
+vmCvar_t	g_grapple;
+vmCvar_t	g_wpflags;
+vmCvar_t	g_weaponlimit;
+vmCvar_t	g_doReady;
+vmCvar_t	g_startArmor;
+vmCvar_t	g_attackerHP;
+vmCvar_t	g_votelimit;
+vmCvar_t	g_thawTime;
+vmCvar_t	g_autothawTime;
+vmCvar_t	g_thawBonus;
+vmCvar_t	g_startFrozen;
+//freeze
+
+//unlagged - server options
+vmCvar_t	g_delagHitscan;
+vmCvar_t	g_unlagged;
+vmCvar_t	g_unlaggedVersion;
+vmCvar_t	g_truePing;
+vmCvar_t	g_lightningDamage;
+vmCvar_t	sv_fps;
+//unlagged - server options
+
+// Multi-arena maps
+vmCvar_t	g_arena;
 
 static cvarTable_t		gameCvarTable[] = {
 	// don't override the cheat state set by the system
@@ -105,7 +136,11 @@ static cvarTable_t		gameCvarTable[] = {
 	{ &g_restarted, "g_restarted", "0", CVAR_ROM, 0, qfalse  },
 
 	// latched vars
+/*freeze
 	{ &g_gametype, "g_gametype", "0", CVAR_SERVERINFO | CVAR_USERINFO | CVAR_LATCH, 0, qfalse  },
+freeze*/
+	{ &g_gametype, "g_gametype", "3", CVAR_SERVERINFO | CVAR_USERINFO | CVAR_LATCH, 0, qfalse },
+//freeze
 
 	{ &g_maxclients, "sv_maxclients", "8", CVAR_SERVERINFO | CVAR_LATCH | CVAR_ARCHIVE, 0, qfalse  },
 	{ &g_maxGameClients, "g_maxGameClients", "0", CVAR_SERVERINFO | CVAR_LATCH | CVAR_ARCHIVE, 0, qfalse  },
@@ -122,6 +157,7 @@ static cvarTable_t		gameCvarTable[] = {
 
 	{ &g_teamAutoJoin, "g_teamAutoJoin", "0", CVAR_ARCHIVE  },
 	{ &g_teamForceBalance, "g_teamForceBalance", "0", CVAR_ARCHIVE  },
+	{ &g_shuffle, "g_shuffle", "0", 0, 0, qfalse },
 
 	{ &g_warmup, "g_warmup", "20", CVAR_ARCHIVE, 0, qtrue  },
 	{ &g_doWarmup, "g_doWarmup", "0", CVAR_ARCHIVE, 0, qtrue  },
@@ -171,7 +207,38 @@ static cvarTable_t		gameCvarTable[] = {
 	{ &g_enableDust, "g_enableDust", "0", CVAR_SERVERINFO, 0, qtrue, qfalse },
 	{ &g_enableBreath, "g_enableBreath", "0", CVAR_SERVERINFO, 0, qtrue, qfalse },
 	{ &g_proxMineTimeout, "g_proxMineTimeout", "20000", 0, 0, qfalse },
+//freeze
+#else
+	{ &g_enableBreath, "g_enableBreath", "1", CVAR_SERVERINFO, 0, qtrue, qfalse },
+//freeze
 #endif
+
+//freeze
+	{ &g_grapple, "g_grapple", "0", 0, 0, qfalse },
+	{ &g_wpflags, "wpflags", "0", 0, 0, qfalse },
+	{ &g_weaponlimit, "weaponlimit", "0", 0, 0, qfalse },
+	{ &g_doReady, "g_doReady", "0", 0, 0, qfalse },
+	{ &g_startArmor, "g_startArmor", "0", 0, 0, qfalse },
+	{ &g_attackerHP, "g_attackerHP", "0", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_votelimit, "votelimit", "0", 0, 0, qfalse },
+	{ &g_thawTime, "g_thawTime", "2000", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_autothawTime, "g_autothawTime", "120", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_thawBonus, "g_thawBonus", "1", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_startFrozen, "g_startFrozen", "0", CVAR_ARCHIVE, 0, qtrue },
+//freeze
+
+//unlagged - server options
+	{ &g_delagHitscan, "g_delagHitscan", "1", CVAR_ARCHIVE | CVAR_SERVERINFO, 0, qtrue },
+	{ &g_unlagged, "g_unlagged", "0", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_unlaggedVersion, "g_unlaggedVersion", "2.01", CVAR_ROM | CVAR_SERVERINFO, 0, qfalse },
+	{ &g_truePing, "g_truePing", "0", CVAR_ARCHIVE, 0, qtrue },
+	{ &g_lightningDamage, "g_lightningDamage", "8", 0, 0, qtrue },
+	{ &sv_fps, "sv_fps", "20", CVAR_ARCHIVE, 0, qfalse },
+//unlagged - server options
+
+//Multi-arena maps
+	{ &g_arena, "g_arena", "", CVAR_SERVERINFO | CVAR_USERINFO | CVAR_LATCH, 0, qfalse },
+
 	{ &g_smoothClients, "g_smoothClients", "1", 0, 0, qfalse},
 	{ &pmove_fixed, "pmove_fixed", "0", CVAR_SYSTEMINFO, 0, qfalse},
 	{ &pmove_msec, "pmove_msec", "8", CVAR_SYSTEMINFO, 0, qfalse},
@@ -883,7 +950,9 @@ void CalculateRanks( void ) {
 	}
 
 	// see if it is time to end the level
+/*freeze
 	CheckExitRules();
+freeze*/
 
 	// if we are at the intermission, send the new info to everyone
 	if ( level.intermissiontime ) {
@@ -1010,6 +1079,7 @@ void BeginIntermission( void ) {
 			ClientRespawn(client);
 		}
 		MoveClientToIntermission( client );
+		G_printMatchInfo ( client );
 	}
 #ifdef MISSIONPACK
 	if (g_singlePlayer.integer) {
@@ -1266,7 +1336,11 @@ void CheckIntermissionExit( void ) {
 	// only test ready status when there are real players present
 	if ( playerCount > 0 ) {
 		// if nobody wants to go, clear timer
+/*freeze
 		if ( !ready ) {
+freeze*/
+	if ( !ready && notReady ) {
+//freeze
 			level.readyToExit = qfalse;
 			return;
 		}
@@ -1350,6 +1424,10 @@ void CheckExitRules( void ) {
 		return;
 	}
 
+//freeze
+	CheckDelay();
+//freeze
+
 	// check for sudden death
 	if ( ScoreIsTied() ) {
 		// always wait for sudden death
@@ -1395,7 +1473,11 @@ void CheckExitRules( void ) {
 		}
 	}
 
+/*freeze
 	if ( g_gametype.integer >= GT_CTF && g_capturelimit.integer ) {
+freeze*/
+	if ( g_gametype.integer >= GT_TEAM && g_capturelimit.integer ) {
+//freeze
 
 		if ( level.teamScores[TEAM_RED] >= g_capturelimit.integer ) {
 			trap_SendServerCommand( -1, "print \"Red hit the capturelimit.\n\"" );
@@ -1500,6 +1582,12 @@ void CheckTournament( void ) {
 		} else if ( level.numPlayingClients < 2 ) {
 			notEnough = qtrue;
 		}
+
+//freeze
+		if ( !notEnough ) {
+			notEnough = readyCheck();
+		}
+//freeze
 
 		if ( notEnough ) {
 			if ( level.warmupTime != -1 ) {
@@ -1810,10 +1898,15 @@ void G_RunFrame( int levelTime ) {
 			continue;
 		}
 
-		if ( ent->s.eType == ET_MISSILE ) {
-			G_RunMissile( ent );
-			continue;
+		//unlagged - backward reconciliation #2
+		if (!g_unlagged.integer) {
+			// we'll run missiles separately to save CPU in backward reconciliation
+			if ( ent->s.eType == ET_MISSILE ) {
+				G_RunMissile( ent );
+				continue;
+			}
 		}
+		//unlagged - backward reconciliation #2
 
 		if ( ent->s.eType == ET_ITEM || ent->physicsObject ) {
 			G_RunItem( ent );
@@ -1832,6 +1925,33 @@ void G_RunFrame( int levelTime ) {
 
 		G_RunThink( ent );
 	}
+
+	//unlagged - backward reconciliation #2
+	if ( g_unlagged.integer ) {
+		// NOW run the missiles, with all players backward-reconciled
+		// to the positions they were in exactly 50ms ago, at the end
+		// of the last server frame
+		G_TimeShiftAllClients( level.previousTime, NULL );
+
+		ent = &g_entities[0];
+		for (i=0 ; i<level.num_entities ; i++, ent++) {
+			if ( !ent->inuse ) {
+				continue;
+			}
+	
+			// temporary entities don't think
+			if ( ent->freeAfterEvent ) {
+				continue;
+			}
+	
+			if ( ent->s.eType == ET_MISSILE ) {
+				G_RunMissile( ent );
+			}
+		}
+
+		G_UnTimeShiftAllClients( NULL );
+	}
+	//unlagged - backward reconciliation #2
 
 	// perform final fixups on the players
 	ent = &g_entities[0];
@@ -1866,4 +1986,13 @@ void G_RunFrame( int levelTime ) {
 		}
 		trap_Cvar_Set("g_listEntity", "0");
 	}
+
+	//unlagged - backward reconciliation #4
+	if ( g_unlagged.integer ) {
+		// record the time at the end of this frame - it should be about
+		// the time the next frame begins - when the server starts
+		// accepting commands from connected clients
+		level.frameStartTime = trap_Milliseconds();
+	}
+	//unlagged - backward reconciliation #4
 }

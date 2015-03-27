@@ -61,8 +61,12 @@ void AddScore( gentity_t *ent, vec3_t origin, int score ) {
 	ScorePlum(ent, origin, score);
 	//
 	ent->client->ps.persistant[PERS_SCORE] += score;
+
+/*freeze
 	if ( g_gametype.integer == GT_TEAM )
 		level.teamScores[ ent->client->ps.persistant[PERS_TEAM] ] += score;
+freeze*/
+
 	CalculateRanks();
 }
 
@@ -106,7 +110,20 @@ void TossClientItems( gentity_t *self ) {
 	}
 
 	// drop all the powerups if not in teamplay
+/*freeze
 	if ( g_gametype.integer != GT_TEAM ) {
+freeze*/
+	{
+		for ( i = 1; i < HI_NUM_HOLDABLE; i++ ) {
+			if ( i == HI_KAMIKAZE ) continue;
+			if ( bg_itemlist[ self->client->ps.stats[ STAT_HOLDABLE_ITEM ] ].giTag == i ) {
+				item = BG_FindItemForHoldable( i );
+				if ( !item ) break;
+				drop = Drop_Item( self, item, 45 );
+				break;
+			}
+		}
+//freeze
 		angle = 45;
 		for ( i = 1 ; i < PW_NUM_POWERUPS ; i++ ) {
 			if ( self->client->ps.powerups[ i ] > level.time ) {
@@ -447,6 +464,13 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		return;
 	}
 
+	//unlagged - backward reconciliation #2
+	if ( g_unlagged.integer ) {
+		// make sure the body shows up in the client's current position
+		G_UnTimeShiftClient( self );
+	}
+	//unlagged - backward reconciliation #2
+
 	// check for an almost capture
 	CheckAlmostCapture( self, attacker );
 	// check for a player that almost brought in cubes
@@ -462,6 +486,11 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		self->activator->nextthink = level.time;
 	}
 #endif
+
+	// OSP - death stats handled out-of-band of G_Damage for external calls
+	G_addStats( self, attacker, damage, meansOfDeath );
+	// OSP
+
 	self->client->ps.pm_type = PM_DEAD;
 
 	if ( attacker ) {
@@ -538,6 +567,15 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 			attacker->client->lastKillTime = level.time;
 
 		}
+		if( g_attackerHP.integer && attacker->health > 0 ) {
+			if ( ( attacker->health + attacker->client->ps.stats[STAT_ARMOR] ) >= 75 ) {
+				trap_SendServerCommand( self - g_entities, va("chat \"^5%s ^5had ^2%i ^5health and ^2%i ^5armor remaining^7\"",attacker->client->pers.netname, attacker->health, attacker->client->ps.stats[STAT_ARMOR]));
+			} else if ( ( attacker->health + attacker->client->ps.stats[STAT_ARMOR] ) < 75 && ( attacker->health + attacker->client->ps.stats[STAT_ARMOR] ) >= 25 ) {
+				trap_SendServerCommand( self - g_entities, va("chat \"^5%s ^5had ^3%i ^5health and ^3%i ^5armor remaining^7\"",attacker->client->pers.netname, attacker->health, attacker->client->ps.stats[STAT_ARMOR]));
+			} else {
+				trap_SendServerCommand( self - g_entities, va("chat \"^5%s ^5had ^1%i ^5health and ^1%i ^5armor remaining\"",attacker->client->pers.netname, attacker->health, attacker->client->ps.stats[STAT_ARMOR]));
+			}
+		}
 	} else {
 		AddScore( self, self->r.currentOrigin, -1 );
 	}
@@ -579,7 +617,11 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 		if ( client->pers.connected != CON_CONNECTED ) {
 			continue;
 		}
+/*freeze
 		if ( client->sess.sessionTeam != TEAM_SPECTATOR ) {
+freeze*/
+		if ( !is_spectator( client ) ) {
+//freeze
 			continue;
 		}
 		if ( client->sess.spectatorClient == self->s.number ) {
@@ -601,7 +643,9 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 
 	self->s.loopSound = 0;
 
+/*freeze
 	self->r.maxs[2] = -8;
+freeze*/
 
 	// don't allow respawn until the death anim is done
 	// g_forcerespawn may force spawning at some later time
@@ -609,6 +653,16 @@ void player_die( gentity_t *self, gentity_t *inflictor, gentity_t *attacker, int
 
 	// remove powerups
 	memset( self->client->ps.powerups, 0, sizeof(self->client->ps.powerups) );
+
+//freeze
+	player_freeze( self, attacker, meansOfDeath );
+	if ( self->freezeState ) {
+		G_AddEvent( self, EV_DEATH1 + ( rand() % 3 ), killer );
+		trap_LinkEntity( self );
+		return;
+	}
+	self->r.maxs[ 2 ] = -8;
+//freeze
 
 	// never gib in a nodrop
 	contents = trap_PointContents( self->r.currentOrigin, -1 );
@@ -942,6 +996,16 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		if ( targ->flags & FL_GODMODE ) {
 			return;
 		}
+
+//freeze
+		if ( client ) {
+			if ( targ != attacker && level.time - client->respawnTime < 1000 )
+				return;
+		} else {
+			if ( DamageBody( targ, attacker, dir, mod, knockback ) )
+				return;
+		}
+//freeze
 	}
 
 	// battlesuit protects from all radius damage (but takes knockback)
@@ -1031,8 +1095,13 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 		}
 			
 		if ( targ->health <= 0 ) {
-			if ( client )
+			if ( client ) {
 				targ->flags |= FL_NO_KNOCKBACK;
+				// OSP - special hack to not count attempts for body gibbage
+				if ( targ->client->ps.pm_type == PM_DEAD ) {
+					G_addStats( targ, attacker, take, mod );
+				}
+			}
 
 			if (targ->health < -999)
 				targ->health = -999;
@@ -1042,6 +1111,10 @@ void G_Damage( gentity_t *targ, gentity_t *inflictor, gentity_t *attacker,
 			return;
 		} else if ( targ->pain ) {
 			targ->pain (targ, attacker, take);
+		} else {
+			// OSP - update weapon/dmg stats
+			G_addStats( targ, attacker, take, mod );
+			// OSP
 		}
 	}
 

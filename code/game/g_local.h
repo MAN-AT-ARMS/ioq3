@@ -29,7 +29,11 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //==================================================================
 
 // the "gameversion" client command will print this plus compile date
+/*freeze
 #define	GAMEVERSION	BASEGAME
+freeze*/
+#define	GAMEVERSION	"freeze"
+//freeze
 
 #define BODY_QUEUE_SIZE		8
 
@@ -174,6 +178,13 @@ struct gentity_s {
 	float		random;
 
 	gitem_t		*item;			// for bonus items
+
+//freeze
+	qboolean	freezeState;
+	qboolean	readyBegin;
+//freeze
+
+	char	*arena;
 };
 
 
@@ -194,6 +205,13 @@ typedef enum {
 	TEAM_BEGIN,		// Beginning a team game, spawn at base
 	TEAM_ACTIVE		// Now actively playing
 } playerTeamStateState_t;
+
+typedef enum {					// Shuffle players at start of each map
+	SHUFFLE_NONE,				// No shuffle
+	SHUFFLE_SCORE,				// Shuffle - By score
+	SHUFFLE_SCORETIME,			// Shuffle - By score - time
+//	SHUFFLE_RANDOM,				// Shuffle - Random
+} shuffle_t;
 
 typedef struct {
 	playerTeamStateState_t	state;
@@ -224,11 +242,22 @@ typedef struct {
 	int			spectatorClient;	// for chasecam and follow mode
 	int			wins, losses;		// tournament stats
 	qboolean	teamLeader;			// true when this client is a team leader
+
+	// OSP
+	int damage_given;
+	int damage_received;
+	int deaths;
+	int kills;
+	int suicides;
 } clientSession_t;
 
 //
 #define MAX_NETNAME			36
 #define	MAX_VOTE_COUNT		3
+
+//unlagged - true ping
+#define NUM_PING_SAMPLES 64
+//unlagged - true ping
 
 // client data that stays across multiple respawns, but is cleared
 // on each level change or team change at ClientBegin()
@@ -246,8 +275,40 @@ typedef struct {
 	int			voteCount;			// to prevent people from constantly calling votes
 	int			teamVoteCount;		// to prevent people from constantly calling votes
 	qboolean	teamInfo;			// send team overlay updates?
+
+	int			connectTime;		// DHM - Nerve :: level.time the client first connected to the server
+
+//unlagged - client options
+	// these correspond with variables in the userinfo string
+	int			delag;
+	int			debugDelag;
+	int			cmdTimeNudge;
+//unlagged - client options
+//unlagged - lag simulation #2
+	int			latentSnaps;
+	int			latentCmds;
+	int			plOut;
+	usercmd_t	cmdqueue[MAX_LATENT_CMDS];
+	int			cmdhead;
+//unlagged - lag simulation #2
+//unlagged - true ping
+	int			realPing;
+	int			pingsamples[NUM_PING_SAMPLES];
+	int			samplehead;
+//unlagged - true ping
 } clientPersistant_t;
 
+//unlagged - backward reconciliation #1
+// the size of history we'll keep
+#define NUM_CLIENT_HISTORY 17
+
+// everything we need to know to backward reconcile
+typedef struct {
+	vec3_t		mins, maxs;
+	vec3_t		currentOrigin;
+	int			leveltime;
+} clientHistory_t;
+//unlagged - backward reconciliation #1
 
 // this structure is cleared on each ClientSpawn(),
 // except for 'client->pers' and 'client->sess'
@@ -317,6 +378,26 @@ struct gclient_s {
 #endif
 
 	char		*areabits;
+
+//unlagged - backward reconciliation #1
+	// the serverTime the button was pressed
+	// (stored before pmove_fixed changes serverTime)
+	int			attackTime;
+	// the head of the history queue
+	int			historyHead;
+	// the history queue
+	clientHistory_t	history[NUM_CLIENT_HISTORY];
+	// the client's saved position
+	clientHistory_t	saved;			// used to restore after time shift
+	// an approximation of the actual server time we received this
+	// command (not in 50ms increments)
+	int			frameOffset;
+//unlagged - backward reconciliation #1
+
+//unlagged - smooth clients #1
+	// the last frame number we got an update from this client
+	int			lastUpdateFrame;
+//unlagged - smooth clients #1
 };
 
 
@@ -407,6 +488,11 @@ typedef struct {
 #ifdef MISSIONPACK
 	int			portalSequence;
 #endif
+
+//unlagged - backward reconciliation #4
+	// actual time this server frame started
+	int			frameStartTime;
+//unlagged - backward reconciliation #4
 } level_locals_t;
 
 
@@ -429,10 +515,15 @@ void StopFollowing( gentity_t *ent );
 void BroadcastTeamChange( gclient_t *client, int oldTeam );
 void SetTeam( gentity_t *ent, char *s );
 void Cmd_FollowCycle_f( gentity_t *ent, int dir );
+// OSP
+void SanitizeString( char *in, char *out, qboolean fToLower );
 
 //
 // g_items.c
 //
+//freeze
+qboolean Registered( gitem_t *item );
+//freeze
 void G_CheckTeamItems( void );
 void G_RunItem( gentity_t *ent );
 void RespawnItem( gentity_t *ent );
@@ -556,6 +647,16 @@ qboolean CheckGauntletAttack( gentity_t *ent );
 void Weapon_HookFree (gentity_t *ent);
 void Weapon_HookThink (gentity_t *ent);
 
+//unlagged - g_unlagged.c
+void G_ResetHistory( gentity_t *ent );
+void G_StoreHistory( gentity_t *ent );
+void G_TimeShiftAllClients( int time, gentity_t *skip );
+void G_UnTimeShiftAllClients( gentity_t *skip );
+void G_DoTimeShiftFor( gentity_t *ent );
+void G_UndoTimeShiftFor( gentity_t *ent );
+void G_UnTimeShiftClient( gentity_t *client );
+void G_PredictPlayerMove( gentity_t *ent, float frametime );
+//unlagged - g_unlagged.c
 
 //
 // g_client.c
@@ -581,6 +682,8 @@ qboolean SpotWouldTelefrag( gentity_t *spot );
 qboolean	ConsoleCommand( void );
 void G_ProcessIPBans(void);
 qboolean G_FilterPacket (char *from);
+void Svcmd_SwapTeams_f(void);
+void Svcmd_ShuffleTeams_f(qboolean restart);
 
 //
 // g_weapon.c
@@ -631,6 +734,16 @@ void G_RunClient( gentity_t *ent );
 qboolean OnSameTeam( gentity_t *ent1, gentity_t *ent2 );
 void Team_CheckDroppedItem( gentity_t *dropped );
 qboolean CheckObeliskAttack( gentity_t *obelisk, gentity_t *attacker );
+void G_swapTeams(void);
+void G_shuffleTeams(void);
+// OSP
+extern char *aTeams[TEAM_NUM_TEAMS];
+
+///////////////////////
+// g_match.c
+//
+void G_printMatchInfo( gentity_t *ent );
+void G_addStats( gentity_t *targ, gentity_t *attacker, int dmg_ref, int mod );
 
 //
 // g_mem.c
@@ -689,6 +802,10 @@ void BotTestAAS(vec3_t origin);
 
 #include "g_team.h" // teamplay specific stuff
 
+//freeze
+#include "g_freeze.h"
+//freeze
+
 
 extern	level_locals_t	level;
 extern	gentity_t		g_entities[MAX_GENTITIES];
@@ -728,6 +845,7 @@ extern	vmCvar_t	g_blood;
 extern	vmCvar_t	g_allowVote;
 extern	vmCvar_t	g_teamAutoJoin;
 extern	vmCvar_t	g_teamForceBalance;
+extern	vmCvar_t	g_shuffle;
 extern	vmCvar_t	g_banIPs;
 extern	vmCvar_t	g_filterBan;
 extern	vmCvar_t	g_obeliskHealth;
@@ -745,6 +863,36 @@ extern	vmCvar_t	g_enableDust;
 extern	vmCvar_t	g_enableBreath;
 extern	vmCvar_t	g_singlePlayer;
 extern	vmCvar_t	g_proxMineTimeout;
+
+//freeze
+extern	vmCvar_t	g_grapple;
+extern	vmCvar_t	g_wpflags;
+extern	vmCvar_t	g_weaponlimit;
+extern	vmCvar_t	g_doReady;
+extern	vmCvar_t	g_startArmor;
+extern	vmCvar_t	g_attackerHP;
+extern	vmCvar_t	g_votelimit;
+extern	vmCvar_t	g_thawTime;
+extern	vmCvar_t	g_autothawTime;
+extern	vmCvar_t	g_thawBonus;
+extern	vmCvar_t	g_startFrozen;
+//freeze
+
+//unlagged - server options
+// some new server-side variables
+extern	vmCvar_t	g_delagHitscan;
+extern	vmCvar_t	g_unlagged;
+extern	vmCvar_t	g_unlaggedVersion;
+extern	vmCvar_t	g_truePing;
+// server admins can adjust this if they *believe* the lightning 
+// gun is too powerful with lag compensation
+extern	vmCvar_t	g_lightningDamage;
+// this is for convenience - using "sv_fps.integer" is nice :)
+extern	vmCvar_t	sv_fps;
+//unlagged - server options
+
+// Multi-arena Maps
+extern	vmCvar_t	g_arena;
 
 void	trap_Print( const char *text );
 void	trap_Error( const char *text ) __attribute__((noreturn));
@@ -776,6 +924,7 @@ void	trap_SetUserinfo( int num, const char *buffer );
 void	trap_GetServerinfo( char *buffer, int bufferSize );
 void	trap_SetBrushModel( gentity_t *ent, const char *name );
 void	trap_Trace( trace_t *results, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int passEntityNum, int contentmask );
+//void	trap_Trace( trace_t *results, const vec3_t start, vec3_t mins, vec3_t maxs, const vec3_t end, int passEntityNum, int contentmask );
 int		trap_PointContents( const vec3_t point, int passEntityNum );
 qboolean trap_InPVS( const vec3_t p1, const vec3_t p2 );
 qboolean trap_InPVSIgnorePortals( const vec3_t p1, const vec3_t p2 );
@@ -950,4 +1099,9 @@ void	trap_BotResetWeaponState(int weaponstate);
 int		trap_GeneticParentsAndChildSelection(int numranks, float *ranks, int *parent1, int *parent2, int *child);
 
 void	trap_SnapVector( float *v );
+
+// OSP
+#define AP( x ) trap_SendServerCommand( -1, x )                 // Print to all
+#define CP( x ) trap_SendServerCommand( ent - g_entities, x )     // Print to an ent
+#define CPx( x, y ) trap_SendServerCommand( x, y )              // Print to id = x
 

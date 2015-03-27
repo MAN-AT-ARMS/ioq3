@@ -375,6 +375,11 @@ void BotSetTeamStatus(bot_state_t *bs) {
 				teamtask = TEAMTASK_ESCORT;
 			}
 			else {
+//freeze
+				if ( bs->formation_dist == 70 )
+					teamtask = TEAMTASK_ESCORT;
+				else
+//freeze
 				teamtask = TEAMTASK_FOLLOW;
 			}
 			break;
@@ -486,6 +491,10 @@ void BotRefuseOrder(bot_state_t *bs) {
 	}
 }
 
+//freeze
+void BotTeamSeekGoals( bot_state_t *bs );
+//freeze
+
 /*
 ==================
 BotCTFSeekGoals
@@ -495,7 +504,7 @@ void BotCTFSeekGoals(bot_state_t *bs) {
 	float rnd, l1, l2;
 	int flagstatus, c;
 	vec3_t dir;
-	aas_entityinfo_t entinfo;
+//	aas_entityinfo_t entinfo;
 
 	//when carrying a flag in ctf the bot should rush to the base
 	if (BotCTFCarryingFlag(bs)) {
@@ -535,6 +544,7 @@ void BotCTFSeekGoals(bot_state_t *bs) {
 		return;
 	}
 	// if the bot decided to follow someone
+/*freeze
 	if ( bs->ltgtype == LTG_TEAMACCOMPANY && !bs->ordered ) {
 		// if the team mate being accompanied no longer carries the flag
 		BotEntityInfo(bs->teammate, &entinfo);
@@ -542,6 +552,12 @@ void BotCTFSeekGoals(bot_state_t *bs) {
 			bs->ltgtype = 0;
 		}
 	}
+freeze*/
+	BotTeamSeekGoals( bs );
+	if ( bs->ltgtype == LTG_TEAMACCOMPANY ) {
+		return;
+	}
+//freeze
 	//
 	if (BotTeam(bs) == TEAM_RED) flagstatus = bs->redflagstatus * 2 + bs->blueflagstatus;
 	else flagstatus = bs->blueflagstatus * 2 + bs->redflagstatus;
@@ -1358,6 +1374,11 @@ void BotTeamGoals(bot_state_t *bs, int retreat) {
 			BotHarvesterSeekGoals(bs);
 		}
 #endif
+//freeze
+		else if ( gametype == GT_TEAM ) {
+			BotTeamSeekGoals( bs );
+		}
+//freeze
 	}
 	// reset the order time which is used to see if
 	// we decided to refuse an order
@@ -1391,7 +1412,9 @@ char *ClientName(int client, char *name, int size) {
 	char buf[MAX_INFO_STRING];
 
 	if (client < 0 || client >= MAX_CLIENTS) {
+/*freeze
 		BotAI_Print(PRT_ERROR, "ClientName: client out of range\n");
+freeze*/
 		return "[client out of range]";
 	}
 	trap_GetConfigstring(CS_PLAYERS+client, buf, sizeof(buf));
@@ -2998,6 +3021,13 @@ int BotFindEnemy(bot_state_t *bs, int curenemy) {
 		if (EntityIsInvisible(&entinfo) && !EntityIsShooting(&entinfo)) {
 			continue;
 		}
+		
+//unlagged - misc
+		if ( g_unlagged.integer ){
+			// this has nothing to do with lag compensation, but it's great for testing
+			if ( g_entities[i].flags & FL_NOTARGET ) continue;
+		}
+//unlagged - misc
 		//if not an easy fragger don't shoot at chatting players
 		if (easyfragger < 0.5 && EntityIsChatting(&entinfo)) continue;
 		//
@@ -3061,6 +3091,12 @@ int BotTeamFlagCarrierVisible(bot_state_t *bs) {
 	int i;
 	float vis;
 	aas_entityinfo_t entinfo;
+
+//freeze
+	if ( gametype == GT_CTF ) {
+		return -1;
+	}
+//freeze
 
 	for (i = 0; i < maxclients && i < MAX_CLIENTS; i++) {
 		if (i == bs->client)
