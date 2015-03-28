@@ -221,7 +221,7 @@ freeze*/
 	{ &g_wpflags, "wpflags", "127", 0, 0, qfalse },
 	{ &g_weaponlimit, "weaponlimit", "2047", 0, 0, qfalse },
 	{ &g_disableItems, "g_disableItems", "1", 0, 0, qfalse },
-	{ &g_dropAmmo, "g_dropAmmo", "0", 0, 0, qfalse },
+	{ &g_dropAmmo, "g_dropAmmo", "1", 0, 0, qfalse },
 	{ &g_doReady, "g_doReady", "0", 0, 0, qfalse },
 	{ &g_startHealth, "g_startHealth", "100", 0, 0, qfalse },
 	{ &g_startArmor, "g_startArmor", "100", 0, 0, qfalse },
