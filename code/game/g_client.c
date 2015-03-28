@@ -891,16 +891,24 @@ void ClientUserinfoChanged( int clientNum ) {
 		client->pers.maxHealth = 200;
 	} else {
 		health = atoi( Info_ValueForKey( userinfo, "handicap" ) );
-		client->pers.maxHealth = health;
-		if ( client->pers.maxHealth < 1 || client->pers.maxHealth > 100 ) {
-			client->pers.maxHealth = 100;
+		if ( health <= g_startHealth.integer )
+			client->pers.maxHealth = health;
+		else
+			client->pers.maxHealth = g_startHealth.integer;
+
+		if ( client->pers.maxHealth < 1 || client->pers.maxHealth > g_startHealth.integer ) {
+			client->pers.maxHealth = g_startHealth.integer;
 		}
 	}
 #else
 	health = atoi( Info_ValueForKey( userinfo, "handicap" ) );
-	client->pers.maxHealth = health;
-	if ( client->pers.maxHealth < 1 || client->pers.maxHealth > 100 ) {
-		client->pers.maxHealth = 100;
+	if ( health <= g_startHealth.integer )
+		client->pers.maxHealth = health;
+	else
+		client->pers.maxHealth = g_startHealth.integer;
+
+	if ( client->pers.maxHealth < 1 || client->pers.maxHealth > g_startHealth.integer ) {
+		client->pers.maxHealth = g_startHealth.integer;
 	}
 #endif
 	client->ps.stats[STAT_MAX_HEALTH] = client->pers.maxHealth;
@@ -1326,9 +1334,13 @@ void ClientSpawn(gentity_t *ent) {
 
 	trap_GetUserinfo( index, userinfo, sizeof(userinfo) );
 	// set max health
-	client->pers.maxHealth = atoi( Info_ValueForKey( userinfo, "handicap" ) );
-	if ( client->pers.maxHealth < 1 || client->pers.maxHealth > 100 ) {
-		client->pers.maxHealth = 100;
+	if ( g_startHealth.integer )
+		client->pers.maxHealth = g_startHealth.integer;
+	else
+		client->pers.maxHealth = atoi( Info_ValueForKey( userinfo, "handicap" ) );
+
+	if ( client->pers.maxHealth < 1 || client->pers.maxHealth > g_startHealth.integer ) {
+		client->pers.maxHealth = g_startHealth.integer;
 	}
 	// clear entity values
 	client->ps.stats[STAT_MAX_HEALTH] = client->pers.maxHealth;

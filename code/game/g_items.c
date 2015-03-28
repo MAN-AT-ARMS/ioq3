@@ -588,6 +588,9 @@ Spawns an item and tosses it forward
 gentity_t *LaunchItem( gitem_t *item, vec3_t origin, vec3_t velocity ) {
 	gentity_t	*dropped;
 
+	if ( ( item->giType == IT_WEAPON || item->giType == IT_AMMO ) && !g_dropAmmo.integer )
+		return NULL;
+
 	dropped = G_Spawn();
 
 	dropped->s.eType = ET_ITEM;
@@ -922,6 +925,10 @@ void G_SpawnItem (gentity_t *ent, gitem_t *item) {
 	G_SpawnFloat( "wait", "0", &ent->wait );
 
 	RegisterItem( item );
+
+	if ( g_disableItems.integer )
+		return;
+
 	if ( G_ItemDisabled(item) )
 		return;
 
