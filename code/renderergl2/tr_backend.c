@@ -482,8 +482,9 @@ void RB_BeginDrawingView (void) {
 			// FIXME: hack for cubemap testing
 			if (tr.renderCubeFbo && backEnd.viewParms.targetFbo == tr.renderCubeFbo)
 			{
+				cubemap_t *cubemap = &tr.cubemaps[backEnd.viewParms.targetFboCubemapIndex];
 				//qglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + backEnd.viewParms.targetFboLayer, backEnd.viewParms.targetFbo->colorImage[0]->texnum, 0);
-				qglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + backEnd.viewParms.targetFboLayer, tr.cubemaps[backEnd.viewParms.targetFboCubemapIndex]->texnum, 0);
+				qglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + backEnd.viewParms.targetFboLayer, cubemap->image->texnum, 0);
 			}
 		}
 	}
@@ -548,8 +549,6 @@ void RB_BeginDrawingView (void) {
 	}
 }
 
-
-#define	MAC_EVENT_PUMP_MSEC		5
 
 /*
 ==================
@@ -1313,9 +1312,11 @@ const void	*RB_DrawSurfs( const void *data ) {
 
 	if (glRefConfig.framebufferObject && tr.renderCubeFbo && backEnd.viewParms.targetFbo == tr.renderCubeFbo)
 	{
+		cubemap_t *cubemap = &tr.cubemaps[backEnd.viewParms.targetFboCubemapIndex];
+
 		FBO_Bind(NULL);
 		GL_SelectTexture(TB_CUBEMAP);
-		GL_BindToTMU(tr.cubemaps[backEnd.viewParms.targetFboCubemapIndex], TB_CUBEMAP);
+		GL_BindToTMU(cubemap->image, TB_CUBEMAP);
 		qglGenerateMipmapEXT(GL_TEXTURE_CUBE_MAP);
 		GL_SelectTexture(0);
 	}
@@ -1726,12 +1727,71 @@ const void *RB_PostProcess(const void *data)
 		{
 			VectorSet4(dstBox, 0, glConfig.vidHeight - 256, 256, 256);
 			//FBO_BlitFromTexture(tr.renderCubeImage, NULL, NULL, NULL, dstBox, &tr.testcubeShader, NULL, 0);
-			FBO_BlitFromTexture(tr.cubemaps[cubemapIndex - 1], NULL, NULL, NULL, dstBox, &tr.testcubeShader, NULL, 0);
+			FBO_BlitFromTexture(tr.cubemaps[cubemapIndex - 1].image, NULL, NULL, NULL, dstBox, &tr.testcubeShader, NULL, 0);
 		}
 	}
 #endif
 
 	backEnd.framePostProcessed = qtrue;
+
+	return (const void *)(cmd + 1);
+}
+
+// FIXME: put this function declaration elsewhere
+void R_SaveDDS(const char *filename, byte *pic, int width, int height, int depth);
+
+/*
+=============
+RB_ExportCubemaps
+
+=============
+*/
+const void *RB_ExportCubemaps(const void *data)
+{
+	const exportCubemapsCommand_t *cmd = data;
+
+	// finish any 2D drawing if needed
+	if (tess.numIndexes)
+		RB_EndSurface();
+
+	if (!glRefConfig.framebufferObject || !tr.world || tr.numCubemaps == 0)
+	{
+		// do nothing
+		ri.Printf(PRINT_ALL, "Nothing to export!\n");
+		return (const void *)(cmd + 1);
+	}
+
+	if (cmd)
+	{
+		FBO_t *oldFbo = glState.currentFBO;
+		int sideSize = r_cubemapSize->integer * r_cubemapSize->integer * 4;
+		byte *cubemapPixels = ri.Malloc(sideSize * 6);
+		int i, j;
+
+		FBO_Bind(tr.renderCubeFbo);
+
+		for (i = 0; i < tr.numCubemaps; i++)
+		{
+			char filename[MAX_QPATH];
+			cubemap_t *cubemap = &tr.cubemaps[i];
+			char *p = cubemapPixels;
+
+			for (j = 0; j < 6; j++)
+			{
+				qglFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT, GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, cubemap->image->texnum, 0);
+				qglReadPixels(0, 0, r_cubemapSize->integer, r_cubemapSize->integer, GL_RGBA, GL_UNSIGNED_BYTE, p);
+				p += sideSize;
+			}
+
+			Com_sprintf(filename, MAX_QPATH, "cubemaps/%s/%03d.dds", tr.world->baseName, i);
+			R_SaveDDS(filename, cubemapPixels, r_cubemapSize->integer, r_cubemapSize->integer, 6);
+			ri.Printf(PRINT_ALL, "Saved cubemap %d as %s\n", i, filename);
+		}
+
+		FBO_Bind(oldFbo);
+
+		ri.Free(cubemapPixels);
+	}
 
 	return (const void *)(cmd + 1);
 }
@@ -1783,6 +1843,9 @@ void RB_ExecuteRenderCommands( const void *data ) {
 			break;
 		case RC_POSTPROCESS:
 			data = RB_PostProcess(data);
+			break;
+		case RC_EXPORT_CUBEMAPS:
+			data = RB_ExportCubemaps(data);
 			break;
 		case RC_END_OF_LIST:
 		default:
