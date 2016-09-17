@@ -72,7 +72,9 @@ cvar_t	*com_showtrace;
 cvar_t	*com_version;
 cvar_t	*com_blood;
 cvar_t	*com_buildScript;	// for automated data building scripts
+#ifdef CINEMATICS_INTRO
 cvar_t	*com_introPlayed;
+#endif
 cvar_t	*cl_paused;
 cvar_t	*sv_paused;
 cvar_t  *cl_packetdelay;
@@ -2754,7 +2756,9 @@ void Com_Init( char *commandLine ) {
 	com_busyWait = Cvar_Get("com_busyWait", "0", CVAR_ARCHIVE);
 	Cvar_Get("com_errorMessage", "", CVAR_ROM | CVAR_NORESTART);
 
+#ifdef CINEMATICS_INTRO
 	com_introPlayed = Cvar_Get( "com_introplayed", "0", CVAR_ARCHIVE);
+#endif
 
 	s = va("%s %s %s", Q3_VERSION, PLATFORM_STRING, __DATE__ );
 	com_version = Cvar_Get ("version", s, CVAR_ROM | CVAR_SERVERINFO );
@@ -2805,11 +2809,15 @@ void Com_Init( char *commandLine ) {
 	if ( !Com_AddStartupCommands() ) {
 		// if the user didn't give any commands, run default action
 		if ( !com_dedicated->integer ) {
+#ifdef CINEMATICS_LOGO
 			Cbuf_AddText ("cinematic " CINEMATICS_LOGO "\n");
+#endif
+#ifdef CINEMATICS_INTRO
 			if( !com_introPlayed->integer ) {
 				Cvar_Set( com_introPlayed->name, "1" );
 				Cvar_Set( "nextmap", "cinematic " CINEMATICS_INTRO );
 			}
+#endif
 		}
 	}
 
