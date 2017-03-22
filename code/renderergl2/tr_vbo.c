@@ -39,28 +39,6 @@ void R_VaoPackNormal(int16_t *out, vec3_t v)
 	out[3] = 0;
 }
 
-int R_VaoPackTexCoord(byte *out, vec2_t st)
-{
-	if (glRefConfig.packedTexcoordDataType == GL_HALF_FLOAT)
-	{
-		uint16_t *num = (uint16_t *)out;
-
-		*num++ = FloatToHalf(st[0]);
-		*num++ = FloatToHalf(st[1]);
-
-		return sizeof(*num) * 2;
-	}
-	else
-	{
-		float *num = (float *)out;
-
-		*num++ = st[0];
-		*num++ = st[1];
-
-		return sizeof(*num) * 2;
-	}
-}
-
 void R_VaoPackColor(uint16_t *out, vec4_t c)
 {
 	out[0] = c[0] * 65535.0f + 0.5f;
@@ -247,8 +225,8 @@ vao_t *R_CreateVao2(const char *name, int numVertexes, srfVert_t *verts, int num
 	vao->attribs[ATTR_INDEX_POSITION      ].type = GL_FLOAT;
 	vao->attribs[ATTR_INDEX_NORMAL        ].type = GL_SHORT;
 	vao->attribs[ATTR_INDEX_TANGENT       ].type = GL_SHORT;
-	vao->attribs[ATTR_INDEX_TEXCOORD      ].type = glRefConfig.packedTexcoordDataType;
-	vao->attribs[ATTR_INDEX_LIGHTCOORD    ].type = glRefConfig.packedTexcoordDataType;
+	vao->attribs[ATTR_INDEX_TEXCOORD      ].type = GL_FLOAT;
+	vao->attribs[ATTR_INDEX_LIGHTCOORD    ].type = GL_FLOAT;
 	vao->attribs[ATTR_INDEX_COLOR         ].type = GL_UNSIGNED_SHORT;
 	vao->attribs[ATTR_INDEX_LIGHTDIRECTION].type = GL_SHORT;
 
@@ -263,8 +241,8 @@ vao_t *R_CreateVao2(const char *name, int numVertexes, srfVert_t *verts, int num
 	vao->attribs[ATTR_INDEX_POSITION      ].offset = 0;        dataSize  = sizeof(verts[0].xyz);
 	vao->attribs[ATTR_INDEX_NORMAL        ].offset = dataSize; dataSize += sizeof(verts[0].normal);
 	vao->attribs[ATTR_INDEX_TANGENT       ].offset = dataSize; dataSize += sizeof(verts[0].tangent);
-	vao->attribs[ATTR_INDEX_TEXCOORD      ].offset = dataSize; dataSize += glRefConfig.packedTexcoordDataSize;
-	vao->attribs[ATTR_INDEX_LIGHTCOORD    ].offset = dataSize; dataSize += glRefConfig.packedTexcoordDataSize;
+	vao->attribs[ATTR_INDEX_TEXCOORD      ].offset = dataSize; dataSize += sizeof(verts[0].st);
+	vao->attribs[ATTR_INDEX_LIGHTCOORD    ].offset = dataSize; dataSize += sizeof(verts[0].lightmap);
 	vao->attribs[ATTR_INDEX_COLOR         ].offset = dataSize; dataSize += sizeof(verts[0].color);
 	vao->attribs[ATTR_INDEX_LIGHTDIRECTION].offset = dataSize; dataSize += sizeof(verts[0].lightdir);
 
@@ -304,10 +282,12 @@ vao_t *R_CreateVao2(const char *name, int numVertexes, srfVert_t *verts, int num
 		dataOfs += sizeof(verts[i].tangent);
 
 		// texcoords
-		dataOfs += R_VaoPackTexCoord(data + dataOfs, verts[i].st);
+		memcpy(data + dataOfs, &verts[i].st, sizeof(verts[i].st));
+		dataOfs += sizeof(verts[i].st);
 
 		// lightmap texcoords
-		dataOfs += R_VaoPackTexCoord(data + dataOfs, verts[i].lightmap);
+		memcpy(data + dataOfs, &verts[i].lightmap, sizeof(verts[i].lightmap));
+		dataOfs += sizeof(verts[i].lightmap);
 
 		// colors
 		memcpy(data + dataOfs, &verts[i].color, sizeof(verts[i].color));
@@ -380,8 +360,8 @@ void R_BindVao(vao_t * vao)
 		{
 			qglBindVertexArray(vao->vao);
 
-			// why you no save GL_ELEMENT_ARRAY_BUFFER binding, Intel?
-			if (1)
+			// Intel Graphics doesn't save GL_ELEMENT_ARRAY_BUFFER binding with VAO binding.
+			if (glRefConfig.intelGraphics || vao == tess.vao)
 				qglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, vao->indexesIBO);
 
 			// tess VAO always has buffers bound
@@ -448,7 +428,8 @@ void R_InitVaos(void)
 	vertexesSize += sizeof(tess.normal[0]);
 	vertexesSize += sizeof(tess.tangent[0]);
 	vertexesSize += sizeof(tess.color[0]);
-	vertexesSize += sizeof(tess.texCoords[0][0]) * 2;
+	vertexesSize += sizeof(tess.texCoords[0]);
+	vertexesSize += sizeof(tess.lightCoords[0]);
 	vertexesSize += sizeof(tess.lightdir[0]);
 	vertexesSize *= SHADER_MAX_VERTEXES;
 
@@ -490,29 +471,27 @@ void R_InitVaos(void)
 	tess.vao->attribs[ATTR_INDEX_COLOR         ].normalized = GL_TRUE;
 	tess.vao->attribs[ATTR_INDEX_LIGHTDIRECTION].normalized = GL_TRUE;
 
-	tess.vao->attribs[ATTR_INDEX_POSITION      ].offset = offset; offset += sizeof(tess.xyz[0])              * SHADER_MAX_VERTEXES;
-	tess.vao->attribs[ATTR_INDEX_NORMAL        ].offset = offset; offset += sizeof(tess.normal[0])           * SHADER_MAX_VERTEXES;
-	tess.vao->attribs[ATTR_INDEX_TANGENT       ].offset = offset; offset += sizeof(tess.tangent[0])          * SHADER_MAX_VERTEXES;
-	// these next two are actually interleaved
-	tess.vao->attribs[ATTR_INDEX_TEXCOORD      ].offset = offset; 
-	tess.vao->attribs[ATTR_INDEX_LIGHTCOORD    ].offset = offset + sizeof(tess.texCoords[0][0]);
-	                                                              offset += sizeof(tess.texCoords[0][0]) * 2 * SHADER_MAX_VERTEXES;
-
-	tess.vao->attribs[ATTR_INDEX_COLOR         ].offset = offset; offset += sizeof(tess.color[0])            * SHADER_MAX_VERTEXES;
+	tess.vao->attribs[ATTR_INDEX_POSITION      ].offset = offset; offset += sizeof(tess.xyz[0])         * SHADER_MAX_VERTEXES;
+	tess.vao->attribs[ATTR_INDEX_NORMAL        ].offset = offset; offset += sizeof(tess.normal[0])      * SHADER_MAX_VERTEXES;
+	tess.vao->attribs[ATTR_INDEX_TANGENT       ].offset = offset; offset += sizeof(tess.tangent[0])     * SHADER_MAX_VERTEXES;
+	tess.vao->attribs[ATTR_INDEX_TEXCOORD      ].offset = offset; offset += sizeof(tess.texCoords[0])   * SHADER_MAX_VERTEXES;
+	tess.vao->attribs[ATTR_INDEX_LIGHTCOORD    ].offset = offset; offset += sizeof(tess.lightCoords[0]) * SHADER_MAX_VERTEXES;
+	tess.vao->attribs[ATTR_INDEX_COLOR         ].offset = offset; offset += sizeof(tess.color[0])       * SHADER_MAX_VERTEXES;
 	tess.vao->attribs[ATTR_INDEX_LIGHTDIRECTION].offset = offset;
 
 	tess.vao->attribs[ATTR_INDEX_POSITION      ].stride = sizeof(tess.xyz[0]);
 	tess.vao->attribs[ATTR_INDEX_NORMAL        ].stride = sizeof(tess.normal[0]);
 	tess.vao->attribs[ATTR_INDEX_TANGENT       ].stride = sizeof(tess.tangent[0]);
+	tess.vao->attribs[ATTR_INDEX_TEXCOORD      ].stride = sizeof(tess.texCoords[0]);
+	tess.vao->attribs[ATTR_INDEX_LIGHTCOORD    ].stride = sizeof(tess.lightCoords[0]);
 	tess.vao->attribs[ATTR_INDEX_COLOR         ].stride = sizeof(tess.color[0]);
-	tess.vao->attribs[ATTR_INDEX_TEXCOORD      ].stride = sizeof(tess.texCoords[0][0]) * 2;
-	tess.vao->attribs[ATTR_INDEX_LIGHTCOORD    ].stride = sizeof(tess.texCoords[0][0]) * 2;
 	tess.vao->attribs[ATTR_INDEX_LIGHTDIRECTION].stride = sizeof(tess.lightdir[0]);
 
 	tess.attribPointers[ATTR_INDEX_POSITION]       = tess.xyz;
-	tess.attribPointers[ATTR_INDEX_TEXCOORD]       = tess.texCoords;
 	tess.attribPointers[ATTR_INDEX_NORMAL]         = tess.normal;
 	tess.attribPointers[ATTR_INDEX_TANGENT]        = tess.tangent;
+	tess.attribPointers[ATTR_INDEX_TEXCOORD]       = tess.texCoords;
+	tess.attribPointers[ATTR_INDEX_LIGHTCOORD]     = tess.lightCoords;
 	tess.attribPointers[ATTR_INDEX_COLOR]          = tess.color;
 	tess.attribPointers[ATTR_INDEX_LIGHTDIRECTION] = tess.lightdir;
 
@@ -632,14 +611,6 @@ void RB_UpdateTessVao(unsigned int attribBits)
 			attribBits = ATTR_BITS;
 
 		attribUpload = attribBits;
-
-		if((attribUpload & ATTR_TEXCOORD) || (attribUpload & ATTR_LIGHTCOORD))
-		{
-			// these are interleaved, so we update both if either need it
-			// this translates to updating ATTR_TEXCOORD twice as large as it needs
-			attribUpload &= ~ATTR_LIGHTCOORD;
-			attribUpload |= ATTR_TEXCOORD;
-		}
 
 		for (attribIndex = 0; attribIndex < ATTR_INDEX_COUNT; attribIndex++)
 		{
