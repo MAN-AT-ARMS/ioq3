@@ -21,7 +21,7 @@ int BotTeamCarrierVisible( bot_state_t *bs ) {
 
 	alertness = trap_Characteristic_BFloat( bs->character, CHARACTERISTIC_ALERTNESS, 0, 1 );
 
-	for ( i = 0; i < maxclients && i < MAX_CLIENTS; i++ ) {
+	for ( i = 0; i < level.maxclients; i++ ) {
 		if ( i == bs->client ) continue;
 		ent = &g_entities[ i ];
 		if ( !ent->inuse || !ent->target_ent ) continue;
