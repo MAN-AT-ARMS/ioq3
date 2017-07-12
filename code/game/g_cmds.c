@@ -34,11 +34,16 @@ DeathmatchScoreboardMessage
 */
 void DeathmatchScoreboardMessage( gentity_t *ent ) {
 	char		entry[1024];
-	char		string[1400];
+	char		string[1000];
 	int			stringlength;
 	int			i, j;
 	gclient_t	*cl;
 	int			numSorted, scoreFlags, accuracy, perfect;
+
+	// don't send scores to bots, they don't parse it
+	if ( ent->r.svFlags & SVF_BOT ) {
+		return;
+	}
 
 	// send the latest information on all clients
 	string[0] = 0;
@@ -228,31 +233,35 @@ Returns a player number for either a number or name string
 Returns -1 if invalid
 ==================
 */
-int ClientNumberFromString( gentity_t *to, char *s ) {
+int ClientNumberFromString( gentity_t *to, char *s, qboolean checkNums, qboolean checkNames ) {
 	gclient_t	*cl;
 	int			idnum;
 	char		cleanName[MAX_STRING_CHARS];
 
-	// numeric values could be slot numbers
-	if ( StringIsInteger( s ) ) {
-		idnum = atoi( s );
-		if ( idnum >= 0 && idnum < level.maxclients ) {
-			cl = &level.clients[idnum];
-			if ( cl->pers.connected == CON_CONNECTED ) {
-				return idnum;
+	if ( checkNums ) {
+		// numeric values could be slot numbers
+		if ( StringIsInteger( s ) ) {
+			idnum = atoi( s );
+			if ( idnum >= 0 && idnum < level.maxclients ) {
+				cl = &level.clients[idnum];
+				if ( cl->pers.connected == CON_CONNECTED ) {
+					return idnum;
+				}
 			}
 		}
 	}
 
-	// check for a name match
-	for ( idnum=0,cl=level.clients ; idnum < level.maxclients ; idnum++,cl++ ) {
-		if ( cl->pers.connected != CON_CONNECTED ) {
-			continue;
-		}
-		Q_strncpyz(cleanName, cl->pers.netname, sizeof(cleanName));
-		Q_CleanStr(cleanName);
-		if ( !Q_stricmp( cleanName, s ) ) {
-			return idnum;
+	if ( checkNames ) {
+		// check for a name match
+		for ( idnum=0,cl=level.clients ; idnum < level.maxclients ; idnum++,cl++ ) {
+			if ( cl->pers.connected != CON_CONNECTED ) {
+				continue;
+			}
+			Q_strncpyz(cleanName, cl->pers.netname, sizeof(cleanName));
+			Q_CleanStr(cleanName);
+			if ( !Q_stricmp( cleanName, s ) ) {
+				return idnum;
+			}
 		}
 	}
 
@@ -552,7 +561,7 @@ void BroadcastTeamChange( gclient_t *client, int oldTeam )
 SetTeam
 =================
 */
-void SetTeam( gentity_t *ent, char *s ) {
+void SetTeam( gentity_t *ent, const char *s ) {
 	int					team, oldTeam;
 	gclient_t			*client;
 	int					clientNum;
@@ -594,7 +603,7 @@ void SetTeam( gentity_t *ent, char *s ) {
 			team = PickTeam( clientNum );
 		}
 
-		if ( g_teamForceBalance.integer  ) {
+		if ( g_teamForceBalance.integer && !client->pers.localClient && !( ent->r.svFlags & SVF_BOT ) ) {
 			int		counts[TEAM_NUM_TEAMS];
 
 			counts[TEAM_BLUE] = TeamCount( clientNum, TEAM_BLUE );
@@ -641,8 +650,8 @@ void SetTeam( gentity_t *ent, char *s ) {
 	// execute the team change
 	//
 
-	// if the player was dead leave the body
-	if ( client->ps.stats[STAT_HEALTH] <= 0 ) {
+	// if the player was dead leave the body, but only if they're actually in game
+	if ( client->ps.stats[STAT_HEALTH] <= 0 && client->pers.connected == CON_CONNECTED ) {
 		CopyToBodyQue(ent);
 	}
 
@@ -681,6 +690,11 @@ void SetTeam( gentity_t *ent, char *s ) {
 
 	// get and distribute relevent paramters
 	ClientUserinfoChanged( clientNum );
+
+	// client hasn't spawned yet, they sent an early team command, teampref userinfo, or g_teamAutoJoin is enabled
+	if ( client->pers.connected != CON_CONNECTED ) {
+		return;
+	}
 
 	ClientBegin( clientNum );
 }
@@ -789,7 +803,7 @@ void Cmd_Follow_f( gentity_t *ent ) {
 	}
 
 	trap_Argv( 1, arg, sizeof( arg ) );
-	i = ClientNumberFromString( ent, arg );
+	i = ClientNumberFromString( ent, arg, qtrue, qtrue );
 	if ( i == -1 ) {
 		return;
 	}
@@ -1050,7 +1064,7 @@ static void Cmd_Tell_f( gentity_t *ent ) {
 	}
 
 	trap_Argv( 1, arg, sizeof( arg ) );
-	targetNum = ClientNumberFromString( ent, arg );
+	targetNum = ClientNumberFromString( ent, arg, qtrue, qtrue );
 	if ( targetNum == -1 ) {
 		return;
 	}
@@ -1176,7 +1190,7 @@ static void Cmd_VoiceTell_f( gentity_t *ent, qboolean voiceonly ) {
 	}
 
 	trap_Argv( 1, arg, sizeof( arg ) );
-	targetNum = ClientNumberFromString( ent, arg );
+	targetNum = ClientNumberFromString( ent, arg, qtrue, qtrue );
 	if ( targetNum == -1 ) {
 		return;
 	}
@@ -1305,7 +1319,7 @@ void Cmd_GameCommand_f( gentity_t *ent ) {
 	}
 
 	trap_Argv( 1, arg, sizeof( arg ) );
-	targetNum = ClientNumberFromString( ent, arg );
+	targetNum = ClientNumberFromString( ent, arg, qtrue, qtrue );
 	if ( targetNum == -1 ) {
 		return;
 	}
@@ -1424,6 +1438,13 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 
 	// if there is still a vote to be executed
 	if ( level.voteExecuteTime ) {
+		// don't start a vote when map change or restart is in progress
+		if ( !Q_stricmpn( level.voteString, "map", 3 )
+			|| !Q_stricmpn( level.voteString, "nextmap", 7 ) ) {
+			trap_SendServerCommand( ent-g_entities, "print \"Vote after map change.\n\"" );
+			return;
+		}
+
 		level.voteExecuteTime = 0;
 		trap_SendConsoleCommand( EXEC_APPEND, va("%s\n", level.voteString ) );
 	}
@@ -1469,6 +1490,19 @@ void Cmd_CallVote_f( gentity_t *ent ) {
 		}
 		Com_sprintf( level.voteString, sizeof( level.voteString ), "vstr nextmap");
 		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s", level.voteString );
+	} else if ( !Q_stricmp( arg1, "clientkick" ) || !Q_stricmp( arg1, "kick" ) ) {
+		i = ClientNumberFromString( ent, arg2, !Q_stricmp( arg1, "clientkick" ), !Q_stricmp( arg1, "kick" ) );
+		if ( i == -1 ) {
+			return;
+		}
+
+		if ( level.clients[i].pers.localClient ) {
+			trap_SendServerCommand( ent - g_entities, "print \"Cannot kick host player.\n\"" );
+			return;
+		}
+
+		Com_sprintf( level.voteString, sizeof( level.voteString ), "clientkick %d", i );
+		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "kick %s", level.clients[i].pers.netname );
 	} else {
 		Com_sprintf( level.voteString, sizeof( level.voteString ), "%s \"%s\"", arg1, arg2 );
 		Com_sprintf( level.voteDisplayString, sizeof( level.voteDisplayString ), "%s", level.voteString );
@@ -1773,6 +1807,14 @@ void ClientCommand( int clientNum ) {
 
 	ent = g_entities + clientNum;
 	if (!ent->client || ent->client->pers.connected != CON_CONNECTED) {
+		if (ent->client && ent->client->pers.localClient) {
+			// Handle early team command sent by UI when starting a local
+			// team play game.
+			trap_Argv( 0, cmd, sizeof( cmd ) );
+			if (Q_stricmp (cmd, "team") == 0) {
+				Cmd_Team_f (ent);
+			}
+		}
 		return;		// not fully in game yet
 	}
 

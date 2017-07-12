@@ -1121,10 +1121,10 @@ void Menu_TransitionItemByName(menuDef_t *menu, const char *p, rectDef_t rectFro
       item->window.offsetTime = time;
 			memcpy(&item->window.rectClient, &rectFrom, sizeof(rectDef_t));
 			memcpy(&item->window.rectEffects, &rectTo, sizeof(rectDef_t));
-			item->window.rectEffects2.x = abs(rectTo.x - rectFrom.x) / amt;
-			item->window.rectEffects2.y = abs(rectTo.y - rectFrom.y) / amt;
-			item->window.rectEffects2.w = abs(rectTo.w - rectFrom.w) / amt;
-			item->window.rectEffects2.h = abs(rectTo.h - rectFrom.h) / amt;
+			item->window.rectEffects2.x = fabs(rectTo.x - rectFrom.x) / amt;
+			item->window.rectEffects2.y = fabs(rectTo.y - rectFrom.y) / amt;
+			item->window.rectEffects2.w = fabs(rectTo.w - rectFrom.w) / amt;
+			item->window.rectEffects2.h = fabs(rectTo.h - rectFrom.h) / amt;
       Item_UpdatePosition(item);
     }
   }
@@ -1828,6 +1828,27 @@ qboolean Item_ListBox_HandleKey(itemDef_t *item, int key, qboolean down, qboolea
 				return qtrue;
 			}
 		}
+
+		// Use mouse wheel in vertical and horizontal menus.
+		// If scrolling 3 items would replace over half of the
+		// displayed items, only scroll 1 item at a time.
+		if ( key == K_MWHEELUP ) {
+			int scroll = viewmax < 6 ? 1 : 3;
+			listPtr->startPos -= scroll;
+			if (listPtr->startPos < 0) {
+				listPtr->startPos = 0;
+			}
+			return qtrue;
+		}
+		if ( key == K_MWHEELDOWN ) {
+			int scroll = viewmax < 6 ? 1 : 3;
+			listPtr->startPos += scroll;
+			if (listPtr->startPos > max) {
+				listPtr->startPos = max;
+			}
+			return qtrue;
+		}
+
 		// mouse hit
 		if (key == K_MOUSE1 || key == K_MOUSE2) {
 			if (item->window.flags & WINDOW_LB_LEFTARROW) {

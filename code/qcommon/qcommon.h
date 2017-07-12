@@ -881,6 +881,9 @@ extern	cvar_t	*com_protocol;
 #ifdef LEGACY_PROTOCOL
 extern	cvar_t	*com_legacyprotocol;
 #endif
+#ifndef DEDICATED
+extern  cvar_t  *con_autochat;
+#endif
 
 // com_speeds times
 extern	int		time_game;
@@ -1072,6 +1075,8 @@ void	* QDECL Sys_LoadGameDll( const char *name, intptr_t (QDECL **entryPoint)(in
 				  intptr_t (QDECL *systemcalls)(intptr_t, ...) );
 void	Sys_UnloadDll( void *dllHandle );
 
+qboolean Sys_DllExtension( const char *name );
+
 char	*Sys_GetCurrentUser( void );
 
 void	QDECL Sys_Error( const char *error, ...) __attribute__ ((noreturn, format (printf, 1, 2)));
@@ -1108,6 +1113,7 @@ char	*Sys_Cwd( void );
 void	Sys_SetDefaultInstallPath(const char *path);
 char	*Sys_DefaultInstallPath(void);
 char	*Sys_SteamPath(void);
+char	*Sys_GogPath(void);
 
 #ifdef __APPLE__
 char    *Sys_DefaultAppPath(void);

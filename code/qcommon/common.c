@@ -95,6 +95,9 @@ cvar_t	*com_legacyprotocol;
 cvar_t	*com_basegame;
 cvar_t  *com_homepath;
 cvar_t	*com_busyWait;
+#ifndef DEDICATED
+cvar_t  *con_autochat;
+#endif
 
 #if idx64
 	int (*Q_VMftol)(void);
@@ -915,7 +918,6 @@ Z_FreeTags
 ================
 */
 void Z_FreeTags( int tag ) {
-	int			count;
 	memzone_t	*zone;
 
 	if ( tag == TAG_SMALL ) {
@@ -924,13 +926,11 @@ void Z_FreeTags( int tag ) {
 	else {
 		zone = mainzone;
 	}
-	count = 0;
 	// use the rover as our pointer, because
 	// Z_Free automatically adjusts it
 	zone->rover = zone->blocklist.next;
 	do {
 		if ( zone->rover->tag == tag ) {
-			count++;
 			Z_Free( (void *)(zone->rover + 1) );
 			continue;
 		}
@@ -1284,7 +1284,7 @@ Com_Meminfo_f
 void Com_Meminfo_f( void ) {
 	memblock_t	*block;
 	int			zoneBytes, zoneBlocks;
-	int			smallZoneBytes, smallZoneBlocks;
+	int			smallZoneBytes;
 	int			botlibBytes, rendererBytes;
 	int			unused;
 
@@ -1322,11 +1322,9 @@ void Com_Meminfo_f( void ) {
 	}
 
 	smallZoneBytes = 0;
-	smallZoneBlocks = 0;
 	for (block = smallzone->blocklist.next ; ; block = block->next) {
 		if ( block->tag ) {
 			smallZoneBytes += block->size;
-			smallZoneBlocks++;
 		}
 
 		if (block->next == &smallzone->blocklist) {
@@ -2789,6 +2787,10 @@ void Com_Init( char *commandLine ) {
 #endif
 		Cvar_Get("protocol", com_protocol->string, CVAR_ROM);
 
+#ifndef DEDICATED
+	con_autochat = Cvar_Get("con_autochat", "1", CVAR_ARCHIVE);
+#endif
+
 	Sys_Init();
 
 	Sys_InitPIDFile( FS_GetCurrentGameDir() );
@@ -2975,6 +2977,8 @@ void Com_WriteConfig_f( void ) {
 		return;
 	}
 
+	Q_strncpyz( filename, Cmd_Argv(1), sizeof( filename ) );
+	COM_DefaultExtension( filename, sizeof( filename ), ".cfg" );
 
 	if (!COM_CompareExtension(filename, ".cfg"))
 	{
@@ -2982,8 +2986,6 @@ void Com_WriteConfig_f( void ) {
 		return;
 	}
 
-	Q_strncpyz( filename, Cmd_Argv(1), sizeof( filename ) );
-	COM_DefaultExtension( filename, sizeof( filename ), ".cfg" );
 	Com_Printf( "Writing %s.\n", filename );
 	Com_WriteConfigToFile( filename );
 }
@@ -3476,8 +3478,8 @@ void Field_CompleteCommand( char *cmd,
 		completionString = Cmd_Argv( completionArgument - 1 );
 
 #ifndef DEDICATED
-	// Unconditionally add a '\' to the start of the buffer
-	if( completionField->buffer[ 0 ] &&
+	// add a '\' to the start of the buffer if it might be sent as chat otherwise
+	if( con_autochat->integer && completionField->buffer[ 0 ] &&
 			completionField->buffer[ 0 ] != '\\' )
 	{
 		if( completionField->buffer[ 0 ] != '/' )
