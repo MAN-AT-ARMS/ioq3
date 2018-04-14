@@ -20,7 +20,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 // 
-// string allocation/managment
+// string allocation/management
 
 #include "ui_shared.h"
 
@@ -198,6 +198,9 @@ const char *String_Alloc(const char *p) {
 		}
 
 		str  = UI_Alloc(sizeof(stringDef_t));
+		if (!str) {
+			return NULL;
+		}
 		str->next = NULL;
 		str->str = &strPool[ph];
 		if (last) {

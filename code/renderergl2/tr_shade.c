@@ -65,7 +65,7 @@ R_BindAnimatedImageToTMU
 =================
 */
 static void R_BindAnimatedImageToTMU( textureBundle_t *bundle, int tmu ) {
-	int		index;
+	int64_t index;
 
 	if ( bundle->isVideoMap ) {
 		ri.CIN_RunCinematic(bundle->videoMapHandle);
@@ -81,13 +81,18 @@ static void R_BindAnimatedImageToTMU( textureBundle_t *bundle, int tmu ) {
 
 	// it is necessary to do this messy calc to make sure animations line up
 	// exactly with waveforms of the same frequency
-	index = ri.ftol(tess.shaderTime * bundle->imageAnimationSpeed * FUNCTABLE_SIZE);
+	index = tess.shaderTime * bundle->imageAnimationSpeed * FUNCTABLE_SIZE;
 	index >>= FUNCTABLE_SIZE2;
 
 	if ( index < 0 ) {
 		index = 0;	// may happen with shader time offsets
 	}
-	index %= bundle->numImageAnimations;
+
+	// Windows x86 doesn't load renderer DLL with 64 bit modulus
+	//index %= bundle->numImageAnimations;
+	while ( index >= bundle->numImageAnimations ) {
+		index -= bundle->numImageAnimations;
+	}
 
 	GL_BindToTMU( bundle->image[ index ], tmu );
 }
@@ -336,7 +341,7 @@ static void ProjectDlightTexture( void ) {
 		vec4_t vector;
 
 		if ( !( tess.dlightBits & ( 1 << l ) ) ) {
-			continue;	// this surface definately doesn't have any of this light
+			continue;	// this surface definitely doesn't have any of this light
 		}
 
 		dl = &backEnd.refdef.dlights[l];
@@ -667,7 +672,7 @@ static void ForwardDlight( void ) {
 		vec4_t texOffTurb;
 
 		if ( !( tess.dlightBits & ( 1 << l ) ) ) {
-			continue;	// this surface definately doesn't have any of this light
+			continue;	// this surface definitely doesn't have any of this light
 		}
 
 		dl = &backEnd.refdef.dlights[l];
@@ -831,7 +836,7 @@ static void ProjectPshadowVBOGLSL( void ) {
 		vec4_t vector;
 
 		if ( !( tess.pshadowBits & ( 1 << l ) ) ) {
-			continue;	// this surface definately doesn't have any of this shadow
+			continue;	// this surface definitely doesn't have any of this shadow
 		}
 
 		ps = &backEnd.refdef.pshadows[l];

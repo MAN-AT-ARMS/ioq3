@@ -176,7 +176,7 @@ ifndef USE_CURL_DLOPEN
 endif
 
 ifndef USE_CODEC_VORBIS
-USE_CODEC_VORBIS=0
+USE_CODEC_VORBIS=1
 endif
 
 ifndef USE_CODEC_OPUS
@@ -269,10 +269,10 @@ NDIR=$(MOUNT_DIR)/null
 UIDIR=$(MOUNT_DIR)/ui
 Q3UIDIR=$(MOUNT_DIR)/q3_ui
 JPDIR=$(MOUNT_DIR)/jpeg-8c
-OGGDIR=$(MOUNT_DIR)/libogg-1.3.2
-VORBISDIR=$(MOUNT_DIR)/libvorbis-1.3.5
-OPUSDIR=$(MOUNT_DIR)/opus-1.1.4
-OPUSFILEDIR=$(MOUNT_DIR)/opusfile-0.8
+OGGDIR=$(MOUNT_DIR)/libogg-1.3.3
+VORBISDIR=$(MOUNT_DIR)/libvorbis-1.3.6
+OPUSDIR=$(MOUNT_DIR)/opus-1.2.1
+OPUSFILEDIR=$(MOUNT_DIR)/opusfile-0.9
 ZDIR=$(MOUNT_DIR)/zlib
 Q3ASMDIR=$(MOUNT_DIR)/tools/asm
 LBURGDIR=$(MOUNT_DIR)/tools/lcc/lburg
@@ -301,7 +301,6 @@ ifneq ($(call bin_path, pkg-config),)
   OPENAL_LIBS ?= $(shell pkg-config --silence-errors --libs openal)
   SDL_CFLAGS ?= $(shell pkg-config --silence-errors --cflags sdl2|sed 's/-Dmain=SDL_main//')
   SDL_LIBS ?= $(shell pkg-config --silence-errors --libs sdl2)
-  FREETYPE_CFLAGS ?= $(shell pkg-config --silence-errors --cflags freetype2)
 else
   # assume they're in the system default paths (no -I or -L needed)
   CURL_LIBS ?= -lcurl
@@ -311,8 +310,8 @@ endif
 # Use sdl2-config if all else fails
 ifeq ($(SDL_CFLAGS),)
   ifneq ($(call bin_path, sdl2-config),)
-    SDL_CFLAGS ?= $(shell sdl2-config --cflags)
-    SDL_LIBS ?= $(shell sdl2-config --libs)
+    SDL_CFLAGS = $(shell sdl2-config --cflags)
+    SDL_LIBS = $(shell sdl2-config --libs)
   endif
 endif
 
@@ -332,7 +331,7 @@ endif
 #############################################################################
 
 INSTALL=install
-MKDIR=mkdir
+MKDIR=mkdir -p
 EXTRA_FILES=
 CLIENT_EXTRA_FILES=
 
@@ -391,7 +390,7 @@ ifneq (,$(findstring "$(PLATFORM)", "linux" "gnu_kfreebsd" "kfreebsd-gnu" "gnu")
   AUTOUPDATER_LIBS += -ldl
 
   CLIENT_LIBS=$(SDL_LIBS)
-  RENDERER_LIBS = $(SDL_LIBS) -lGL
+  RENDERER_LIBS = $(SDL_LIBS)
 
   ifeq ($(USE_OPENAL),1)
     ifneq ($(USE_OPENAL_DLOPEN),1)
@@ -429,15 +428,22 @@ ifeq ($(PLATFORM),darwin)
   LIBS = -framework Cocoa
   CLIENT_LIBS=
   RENDERER_LIBS=
-  OPTIMIZEVM=
+  OPTIMIZEVM = -O3
 
   # Default minimum Mac OS X version
   ifeq ($(MACOSX_VERSION_MIN),)
     MACOSX_VERSION_MIN=10.7
   endif
 
-  # Multiply by 100 and then remove decimal. 10.7 -> 1070.0 -> 1070
-  MAC_OS_X_VERSION_MIN_REQUIRED=$(shell echo '$(MACOSX_VERSION_MIN) * 100' | bc | cut -d. -f1)
+  MACOSX_MAJOR=$(shell echo $(MACOSX_VERSION_MIN) | cut -d. -f1)
+  MACOSX_MINOR=$(shell echo $(MACOSX_VERSION_MIN) | cut -d. -f2)
+  ifeq ($(shell test $(MACOSX_MINOR) -gt 9; echo $$?),0)
+    # Multiply and then remove decimal. 10.10 -> 101000.0 -> 101000
+    MAC_OS_X_VERSION_MIN_REQUIRED=$(shell echo "$(MACOSX_MAJOR) * 10000 + $(MACOSX_MINOR) * 100" | bc | cut -d. -f1)
+  else
+    # Multiply by 100 and then remove decimal. 10.7 -> 1070.0 -> 1070
+    MAC_OS_X_VERSION_MIN_REQUIRED=$(shell echo "$(MACOSX_VERSION_MIN) * 100" | bc | cut -d. -f1)
+  endif
 
   LDFLAGS += -mmacosx-version-min=$(MACOSX_VERSION_MIN)
   BASE_CFLAGS += -mmacosx-version-min=$(MACOSX_VERSION_MIN) \
@@ -445,7 +451,6 @@ ifeq ($(PLATFORM),darwin)
 
   ifeq ($(ARCH),ppc)
     BASE_CFLAGS += -arch ppc -faltivec
-    OPTIMIZEVM += -O3
   endif
   ifeq ($(ARCH),ppc64)
     BASE_CFLAGS += -arch ppc64 -faltivec
@@ -623,7 +628,7 @@ ifdef MINGW
     CLIENT_LDFLAGS += -mwindows
   endif
   CLIENT_LIBS = -lgdi32 -lole32
-  RENDERER_LIBS = -lgdi32 -lole32 -lopengl32
+  RENDERER_LIBS = -lgdi32 -lole32 -static-libgcc
 
   ifeq ($(USE_FREETYPE),1)
     FREETYPE_CFLAGS = -Ifreetype2
@@ -709,7 +714,7 @@ ifeq ($(PLATFORM),freebsd)
   CLIENT_LIBS =
 
   CLIENT_LIBS += $(SDL_LIBS)
-  RENDERER_LIBS = $(SDL_LIBS) -lGL
+  RENDERER_LIBS = $(SDL_LIBS)
 
   # optional features/libraries
   ifeq ($(USE_OPENAL),1)
@@ -800,7 +805,7 @@ ifeq ($(PLATFORM),openbsd)
   CLIENT_LIBS =
 
   CLIENT_LIBS += $(SDL_LIBS)
-  RENDERER_LIBS = $(SDL_LIBS) -lGL
+  RENDERER_LIBS = $(SDL_LIBS)
 
   ifeq ($(USE_OPENAL),1)
     ifneq ($(USE_OPENAL_DLOPEN),1)
@@ -846,7 +851,6 @@ ifeq ($(PLATFORM),irix64)
   ARCH=mips
 
   CC = c99
-  MKDIR = mkdir -p
 
   BASE_CFLAGS=-Dstricmp=strcasecmp -Xcpluscomm -woff 1185 \
     -I. -I$(ROOT)/usr/include
@@ -863,7 +867,7 @@ ifeq ($(PLATFORM),irix64)
   # FIXME: The X libraries probably aren't necessary?
   CLIENT_LIBS=-L/usr/X11/$(LIB) $(SDL_LIBS) \
     -lX11 -lXext -lm
-  RENDERER_LIBS = $(SDL_LIBS) -lGL
+  RENDERER_LIBS = $(SDL_LIBS)
 
 else # ifeq IRIX
 
@@ -875,7 +879,7 @@ ifeq ($(PLATFORM),sunos)
 
   CC=gcc
   INSTALL=ginstall
-  MKDIR=gmkdir
+  MKDIR=gmkdir -p
   COPYDIR="/usr/local/share/games/quake3"
 
   ifneq ($(ARCH),x86)
@@ -919,7 +923,7 @@ ifeq ($(PLATFORM),sunos)
   BOTCFLAGS=-O0
 
   CLIENT_LIBS +=$(SDL_LIBS) -lX11 -lXext -liconv -lm
-  RENDERER_LIBS = $(SDL_LIBS) -lGL
+  RENDERER_LIBS = $(SDL_LIBS)
 
 else # ifeq sunos
 
@@ -1201,7 +1205,7 @@ define DO_REF_STR
 $(echo_cmd) "REF_STR $<"
 $(Q)rm -f $@
 $(Q)echo "const char *fallbackShader_$(notdir $(basename $<)) =" >> $@
-$(Q)cat $< | sed 's/^/\"/;s/$$/\\n\"/' >> $@
+$(Q)cat $< | sed -e 's/^/\"/;s/$$/\\n\"/' | tr -d '\r' >> $@
 $(Q)echo ";" >> $@
 endef
 
@@ -1397,34 +1401,28 @@ ifneq ($(PLATFORM),darwin)
 endif
 
 makedirs:
-	@if [ ! -d $(BUILD_DIR) ];then $(MKDIR) $(BUILD_DIR);fi
-	@if [ ! -d $(B) ];then $(MKDIR) $(B);fi
-	@if [ ! -d $(B)/autoupdater ];then $(MKDIR) $(B)/autoupdater;fi
-	@if [ ! -d $(B)/client ];then $(MKDIR) $(B)/client;fi
-	@if [ ! -d $(B)/client/opus ];then $(MKDIR) $(B)/client/opus;fi
-	@if [ ! -d $(B)/client/vorbis ];then $(MKDIR) $(B)/client/vorbis;fi
-	@if [ ! -d $(B)/renderergl1 ];then $(MKDIR) $(B)/renderergl1;fi
-	@if [ ! -d $(B)/renderergl2 ];then $(MKDIR) $(B)/renderergl2;fi
-	@if [ ! -d $(B)/renderergl2/glsl ];then $(MKDIR) $(B)/renderergl2/glsl;fi
-	@if [ ! -d $(B)/ded ];then $(MKDIR) $(B)/ded;fi
-	@if [ ! -d $(B)/$(BASEGAME) ];then $(MKDIR) $(B)/$(BASEGAME);fi
-	@if [ ! -d $(B)/$(BASEGAME)/cgame ];then $(MKDIR) $(B)/$(BASEGAME)/cgame;fi
-	@if [ ! -d $(B)/$(BASEGAME)/game ];then $(MKDIR) $(B)/$(BASEGAME)/game;fi
-	@if [ ! -d $(B)/$(BASEGAME)/ui ];then $(MKDIR) $(B)/$(BASEGAME)/ui;fi
-	@if [ ! -d $(B)/$(BASEGAME)/qcommon ];then $(MKDIR) $(B)/$(BASEGAME)/qcommon;fi
-	@if [ ! -d $(B)/$(BASEGAME)/vm ];then $(MKDIR) $(B)/$(BASEGAME)/vm;fi
-	@if [ ! -d $(B)/$(MISSIONPACK) ];then $(MKDIR) $(B)/$(MISSIONPACK);fi
-	@if [ ! -d $(B)/$(MISSIONPACK)/cgame ];then $(MKDIR) $(B)/$(MISSIONPACK)/cgame;fi
-	@if [ ! -d $(B)/$(MISSIONPACK)/game ];then $(MKDIR) $(B)/$(MISSIONPACK)/game;fi
-	@if [ ! -d $(B)/$(MISSIONPACK)/ui ];then $(MKDIR) $(B)/$(MISSIONPACK)/ui;fi
-	@if [ ! -d $(B)/$(MISSIONPACK)/qcommon ];then $(MKDIR) $(B)/$(MISSIONPACK)/qcommon;fi
-	@if [ ! -d $(B)/$(MISSIONPACK)/vm ];then $(MKDIR) $(B)/$(MISSIONPACK)/vm;fi
-	@if [ ! -d $(B)/tools ];then $(MKDIR) $(B)/tools;fi
-	@if [ ! -d $(B)/tools/asm ];then $(MKDIR) $(B)/tools/asm;fi
-	@if [ ! -d $(B)/tools/etc ];then $(MKDIR) $(B)/tools/etc;fi
-	@if [ ! -d $(B)/tools/rcc ];then $(MKDIR) $(B)/tools/rcc;fi
-	@if [ ! -d $(B)/tools/cpp ];then $(MKDIR) $(B)/tools/cpp;fi
-	@if [ ! -d $(B)/tools/lburg ];then $(MKDIR) $(B)/tools/lburg;fi
+	@$(MKDIR) $(B)/autoupdater
+	@$(MKDIR) $(B)/client/opus
+	@$(MKDIR) $(B)/client/vorbis
+	@$(MKDIR) $(B)/renderergl1
+	@$(MKDIR) $(B)/renderergl2
+	@$(MKDIR) $(B)/renderergl2/glsl
+	@$(MKDIR) $(B)/ded
+	@$(MKDIR) $(B)/$(BASEGAME)/cgame
+	@$(MKDIR) $(B)/$(BASEGAME)/game
+	@$(MKDIR) $(B)/$(BASEGAME)/ui
+	@$(MKDIR) $(B)/$(BASEGAME)/qcommon
+	@$(MKDIR) $(B)/$(BASEGAME)/vm
+	@$(MKDIR) $(B)/$(MISSIONPACK)/cgame
+	@$(MKDIR) $(B)/$(MISSIONPACK)/game
+	@$(MKDIR) $(B)/$(MISSIONPACK)/ui
+	@$(MKDIR) $(B)/$(MISSIONPACK)/qcommon
+	@$(MKDIR) $(B)/$(MISSIONPACK)/vm
+	@$(MKDIR) $(B)/tools/asm
+	@$(MKDIR) $(B)/tools/etc
+	@$(MKDIR) $(B)/tools/rcc
+	@$(MKDIR) $(B)/tools/cpp
+	@$(MKDIR) $(B)/tools/lburg
 
 #############################################################################
 # QVM BUILD TOOLS
@@ -2024,6 +2022,7 @@ Q3OBJ += \
   $(B)/client/opus/lin2log.o \
   $(B)/client/opus/log2lin.o \
   $(B)/client/opus/LPC_analysis_filter.o \
+  $(B)/client/opus/LPC_fit.o \
   $(B)/client/opus/LPC_inv_pred_gain.o \
   $(B)/client/opus/table_LSF_cos.o \
   $(B)/client/opus/NLSF2A.o \
@@ -2057,11 +2056,9 @@ Q3OBJ += \
   $(B)/client/opus/LTP_analysis_filter_FLP.o \
   $(B)/client/opus/LTP_scale_ctrl_FLP.o \
   $(B)/client/opus/noise_shape_analysis_FLP.o \
-  $(B)/client/opus/prefilter_FLP.o \
   $(B)/client/opus/process_gains_FLP.o \
   $(B)/client/opus/regularize_correlations_FLP.o \
   $(B)/client/opus/residual_energy_FLP.o \
-  $(B)/client/opus/solve_LS_FLP.o \
   $(B)/client/opus/warped_autocorrelation_FLP.o \
   $(B)/client/opus/wrappers_FLP.o \
   $(B)/client/opus/autocorrelation_FLP.o \
@@ -2070,7 +2067,6 @@ Q3OBJ += \
   $(B)/client/opus/energy_FLP.o \
   $(B)/client/opus/inner_product_FLP.o \
   $(B)/client/opus/k2a_FLP.o \
-  $(B)/client/opus/levinsondurbin_FLP.o \
   $(B)/client/opus/LPC_inv_pred_gain_FLP.o \
   $(B)/client/opus/pitch_analysis_core_FLP.o \
   $(B)/client/opus/scale_copy_vector_FLP.o \
@@ -2707,7 +2703,7 @@ $(B)/client/%.o: $(SYSDIR)/%.c
 $(B)/client/%.o: $(SYSDIR)/%.m
 	$(DO_CC)
 
-$(B)/client/%.o: $(SYSDIR)/%.rc
+$(B)/client/win_resource.o: $(SYSDIR)/win_resource.rc $(SYSDIR)/win_manifest.xml
 	$(DO_WINDRES)
 
 
@@ -2764,7 +2760,7 @@ $(B)/ded/%.o: $(SYSDIR)/%.c
 $(B)/ded/%.o: $(SYSDIR)/%.m
 	$(DO_DED_CC)
 
-$(B)/ded/%.o: $(SYSDIR)/%.rc
+$(B)/ded/win_resource.o: $(SYSDIR)/win_resource.rc $(SYSDIR)/win_manifest.xml
 	$(DO_WINDRES)
 
 $(B)/ded/%.o: $(NDIR)/%.c
@@ -2873,10 +2869,10 @@ copyfiles: release
 	@if [ ! -d $(COPYDIR)/$(BASEGAME) ]; then echo "You need to set COPYDIR to where your Quake3 data is!"; fi
 ifneq ($(BUILD_GAME_SO),0)
   ifneq ($(BUILD_BASEGAME),0)
-	-$(MKDIR) -p -m 0755 $(COPYDIR)/$(BASEGAME)
+	-$(MKDIR) -m 0755 $(COPYDIR)/$(BASEGAME)
   endif
   ifneq ($(BUILD_MISSIONPACK),0)
-	-$(MKDIR) -p -m 0755 $(COPYDIR)/$(MISSIONPACK)
+	-$(MKDIR) -m 0755 $(COPYDIR)/$(MISSIONPACK)
   endif
 endif
 

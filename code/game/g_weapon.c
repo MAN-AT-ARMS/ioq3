@@ -342,6 +342,7 @@ qboolean ShotgunPellet( vec3_t start, vec3_t end, gentity_t *ent ) {
 	vec3_t		impactpoint, bouncedir;
 #endif
 	vec3_t		tr_start, tr_end;
+	qboolean	hitClient = qfalse;
 
 	passent = ent->s.number;
 	VectorCopy( start, tr_start );
@@ -371,19 +372,12 @@ qboolean ShotgunPellet( vec3_t start, vec3_t end, gentity_t *ent ) {
 				}
 				continue;
 			}
-			else {
-				G_Damage( traceEnt, ent, ent, forward, tr.endpos,
-					damage, 0, MOD_SHOTGUN);
-				if( LogAccuracyHit( traceEnt, ent ) ) {
-					return qtrue;
-				}
-			}
-#else
-			G_Damage( traceEnt, ent, ent, forward, tr.endpos,	damage, 0, MOD_SHOTGUN);
-				if( LogAccuracyHit( traceEnt, ent ) ) {
-					return qtrue;
-				}
 #endif
+			if( LogAccuracyHit( traceEnt, ent ) ) {
+				hitClient = qtrue;
+			}
+			G_Damage( traceEnt, ent, ent, forward, tr.endpos, damage, 0, MOD_SHOTGUN);
+			return hitClient;
 		}
 		return qfalse;
 	}
@@ -817,14 +811,11 @@ void Weapon_LightningFire( gentity_t *ent ) {
 				}
 				continue;
 			}
-			else {
-				G_Damage( traceEnt, ent, ent, forward, tr.endpos,
-					damage, 0, MOD_LIGHTNING);
-			}
-#else
-				G_Damage( traceEnt, ent, ent, forward, tr.endpos,
-					damage, 0, MOD_LIGHTNING);
 #endif
+			if( LogAccuracyHit( traceEnt, ent ) ) {
+				ent->client->accuracy_hits++;
+			}
+			G_Damage( traceEnt, ent, ent, forward, tr.endpos, damage, 0, MOD_LIGHTNING);
 		}
 
 		if ( traceEnt->takedamage && traceEnt->client ) {
@@ -832,6 +823,7 @@ void Weapon_LightningFire( gentity_t *ent ) {
 			tent->s.otherEntityNum = traceEnt->s.number;
 			tent->s.eventParm = DirToByte( tr.plane.normal );
 			tent->s.weapon = ent->s.weapon;
+
 			if( LogAccuracyHit( traceEnt, ent ) ) {
 				ent->client->accuracy_hits++;
 			}
@@ -1097,7 +1089,7 @@ static void KamikazeRadiusDamage( vec3_t origin, gentity_t *attacker, float dama
 			continue;
 		}
 
-		// dont hit things we have already hit
+		// don't hit things we have already hit
 		if( ent->kamikazeTime > level.time ) {
 			continue;
 		}
@@ -1157,7 +1149,7 @@ static void KamikazeShockWave( vec3_t origin, gentity_t *attacker, float damage,
 	for ( e = 0 ; e < numListedEntities ; e++ ) {
 		ent = &g_entities[entityList[ e ]];
 
-		// dont hit things we have already hit
+		// don't hit things we have already hit
 		if( ent->kamikazeShockTime > level.time ) {
 			continue;
 		}

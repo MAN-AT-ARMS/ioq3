@@ -1777,10 +1777,10 @@ static void UI_DrawRedBlue(rectDef_t *rect, float scale, vec4_t color, int textS
 }
 
 static void UI_DrawCrosshair(rectDef_t *rect, float scale, vec4_t color) {
- 	trap_R_SetColor( color );
-	if (uiInfo.currentCrosshair < 0 || uiInfo.currentCrosshair >= NUM_CROSSHAIRS) {
-		uiInfo.currentCrosshair = 0;
+	if (!uiInfo.currentCrosshair) {
+		return;
 	}
+	trap_R_SetColor( color );
 	UI_DrawHandlePic( rect->x, rect->y - rect->h, rect->w, rect->h, uiInfo.uiDC.Assets.crosshairShader[uiInfo.currentCrosshair]);
  	trap_R_SetColor( NULL );
 }
@@ -3057,7 +3057,7 @@ static void UI_Update(const char *name) {
 		switch (val) {
 			case 0:
 				trap_Cvar_SetValue( "r_depthbits", 0 );
-				trap_Cvar_SetValue( "r_stencilbits", 0 );
+				trap_Cvar_Reset( "r_stencilbits" );
 			break;
 			case 16:
 				trap_Cvar_SetValue( "r_depthbits", 16 );
@@ -3065,6 +3065,7 @@ static void UI_Update(const char *name) {
 			break;
 			case 32:
 				trap_Cvar_SetValue( "r_depthbits", 24 );
+				trap_Cvar_SetValue( "r_stencilbits", 8 );
 			break;
 		}
 	} else if (Q_stricmp(name, "r_lodbias") == 0) {
@@ -3088,6 +3089,7 @@ static void UI_Update(const char *name) {
 				trap_Cvar_SetValue( "r_lodbias", 0 );
 				trap_Cvar_SetValue( "r_colorbits", 32 );
 				trap_Cvar_SetValue( "r_depthbits", 24 );
+				trap_Cvar_SetValue( "r_stencilbits", 8 );
 				trap_Cvar_SetValue( "r_picmip", 0 );
 				trap_Cvar_SetValue( "r_mode", 4 );
 				trap_Cvar_SetValue( "r_texturebits", 32 );
@@ -3103,7 +3105,8 @@ static void UI_Update(const char *name) {
 				trap_Cvar_SetValue( "r_vertexlight", 0 );
 				trap_Cvar_SetValue( "r_lodbias", 0 );
 				trap_Cvar_SetValue( "r_colorbits", 0 );
-				trap_Cvar_SetValue( "r_depthbits", 24 );
+				trap_Cvar_SetValue( "r_depthbits", 0 );
+				trap_Cvar_Reset( "r_stencilbits" );
 				trap_Cvar_SetValue( "r_picmip", 1 );
 				trap_Cvar_SetValue( "r_mode", 3 );
 				trap_Cvar_SetValue( "r_texturebits", 0 );
@@ -3120,6 +3123,7 @@ static void UI_Update(const char *name) {
 				trap_Cvar_SetValue( "r_lodbias", 1 );
 				trap_Cvar_SetValue( "r_colorbits", 0 );
 				trap_Cvar_SetValue( "r_depthbits", 0 );
+				trap_Cvar_Reset( "r_stencilbits" );
 				trap_Cvar_SetValue( "r_picmip", 1 );
 				trap_Cvar_SetValue( "r_mode", 3 );
 				trap_Cvar_SetValue( "r_texturebits", 0 );
@@ -3136,6 +3140,7 @@ static void UI_Update(const char *name) {
 				trap_Cvar_SetValue( "r_lodbias", 2 );
 				trap_Cvar_SetValue( "r_colorbits", 16 );
 				trap_Cvar_SetValue( "r_depthbits", 16 );
+				trap_Cvar_SetValue( "r_stencilbits", 0 );
 				trap_Cvar_SetValue( "r_mode", 3 );
 				trap_Cvar_SetValue( "r_picmip", 2 );
 				trap_Cvar_SetValue( "r_texturebits", 16 );
@@ -3263,7 +3268,7 @@ static void UI_RunMenuScript(char **args) {
 				trap_Cvar_Set("ui_cdkeyvalid", "CD Key does not appear to be valid.");
 			}
 		} else if (Q_stricmp(name, "loadArenas") == 0) {
-			UI_LoadArenas();
+			UI_LoadArenasIntoMapList();
 			UI_MapCountByGameType(qfalse);
 			Menu_SetFeederSelection(NULL, FEEDER_ALLMAPS, 0, "createserver");
 		} else if (Q_stricmp(name, "saveControls") == 0) {
@@ -5165,6 +5170,7 @@ void _UI_Init( qboolean inGameLoad ) {
 	UI_ParseTeamInfo("teaminfo.txt");
 	UI_LoadTeams();
 	UI_ParseGameInfo("gameinfo.txt");
+	UI_LoadArenas();
 #endif
 
 	menuSet = UI_Cvar_VariableString("ui_menuFiles");
@@ -5192,7 +5198,10 @@ void _UI_Init( qboolean inGameLoad ) {
 
 	// sets defaults for ui temp cvars
 	uiInfo.effectsColor = gamecodetoui[(int)trap_Cvar_VariableValue("color1")-1];
-	uiInfo.currentCrosshair = (int)trap_Cvar_VariableValue("cg_drawCrosshair");
+	uiInfo.currentCrosshair = (int)trap_Cvar_VariableValue("cg_drawCrosshair") % NUM_CROSSHAIRS;
+	if (uiInfo.currentCrosshair < 0) {
+		uiInfo.currentCrosshair = 0;
+	}
 	trap_Cvar_Set("ui_mousePitch", (trap_Cvar_VariableValue("m_pitch") >= 0) ? "0" : "1");
 
 	uiInfo.serverStatus.currentServerCinematic = -1;
@@ -5283,7 +5292,7 @@ void _UI_SetActiveMenu( uiMenuCommand_t menu ) {
 	char buf[256];
 
 	// this should be the ONLY way the menu system is brought up
-	// enusure minumum menu data is cached
+	// ensure minimum menu data is cached
   if (Menu_Count() > 0) {
 		vec3_t v;
 		v[0] = v[1] = v[2] = 0;
@@ -6018,7 +6027,7 @@ static void UI_StartServerRefresh(qboolean full, qboolean force)
 	}
 
 	trap_RealTime(&q);
- 	trap_Cvar_Set( va("ui_lastServerRefresh_%i", ui_netSource.integer), va("%s-%i, %i at %i:%i", MonthAbbrev[q.tm_mon],q.tm_mday, 1900+q.tm_year,q.tm_hour,q.tm_min));
+	trap_Cvar_Set( va("ui_lastServerRefresh_%i", ui_netSource.integer), va("%s-%i, %i at %i:%02i", MonthAbbrev[q.tm_mon],q.tm_mday, 1900+q.tm_year,q.tm_hour,q.tm_min));
 
 	if (!full) {
 		UI_UpdatePendingPings();
