@@ -36,6 +36,19 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../renderercommon/iqm.h"
 #include "../renderercommon/qgl.h"
 
+#define GLE(ret, name, ...) extern name##proc * qgl##name;
+QGL_1_1_PROCS;
+QGL_DESKTOP_1_1_PROCS;
+QGL_1_3_PROCS;
+QGL_1_5_PROCS;
+QGL_2_0_PROCS;
+QGL_3_0_PROCS;
+QGL_ARB_occlusion_query_PROCS;
+QGL_ARB_framebuffer_object_PROCS;
+QGL_ARB_vertex_array_object_PROCS;
+QGL_EXT_direct_state_access_PROCS;
+#undef GLE
+
 #define GL_INDEX_TYPE		GL_UNSIGNED_INT
 typedef unsigned int glIndex_t;
 
@@ -1718,6 +1731,7 @@ extern  cvar_t  *r_deluxeMapping;
 extern  cvar_t  *r_parallaxMapping;
 extern  cvar_t  *r_cubeMapping;
 extern  cvar_t  *r_cubemapSize;
+extern  cvar_t  *r_deluxeSpecular;
 extern  cvar_t  *r_pbr;
 extern  cvar_t  *r_baseNormalX;
 extern  cvar_t  *r_baseNormalY;
@@ -2002,7 +2016,7 @@ void RB_EndSurface(void);
 void RB_CheckOverflow( int verts, int indexes );
 #define RB_CHECKOVERFLOW(v,i) if (tess.numVertexes + (v) >= SHADER_MAX_VERTEXES || tess.numIndexes + (i) >= SHADER_MAX_INDEXES ) {RB_CheckOverflow(v,i);}
 
-void R_DrawElements( int numIndexes, glIndex_t firstIndex );
+void R_DrawElements( int numIndexes, int firstIndex );
 void RB_StageIteratorGeneric( void );
 void RB_StageIteratorSky( void );
 void RB_StageIteratorVertexLitTexture( void );

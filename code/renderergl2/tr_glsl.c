@@ -331,17 +331,6 @@ static void GLSL_GetShaderHeader( GLenum shaderType, const GLchar *extra, char *
 								AGEN_LIGHTING_SPECULAR,
 								AGEN_PORTAL));
 
-	Q_strcat(dest, size,
-							 va("#ifndef texenv_t\n"
-								"#define texenv_t\n"
-								"#define TEXENV_MODULATE %i\n"
-								"#define TEXENV_ADD %i\n"
-								"#define TEXENV_REPLACE %i\n"
-								"#endif\n",
-								GL_MODULATE,
-								GL_ADD,
-								GL_REPLACE));
-
 	fbufWidthScale = 1.0f / ((float)glConfig.vidWidth);
 	fbufHeightScale = 1.0f / ((float)glConfig.vidHeight);
 	Q_strcat(dest, size,
@@ -1067,6 +1056,8 @@ void GLSL_InitGPUShaders(void)
 
 			if (r_cubeMapping->integer)
 				Q_strcat(extradefines, 1024, "#define USE_CUBEMAP\n");
+			else if (r_deluxeSpecular->value > 0.000001f)
+				Q_strcat(extradefines, 1024, va("#define r_deluxeSpecular %f\n", r_deluxeSpecular->value));
 
 			switch (r_glossType->integer)
 			{

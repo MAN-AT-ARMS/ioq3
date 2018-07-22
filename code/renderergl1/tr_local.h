@@ -32,6 +32,14 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../renderercommon/iqm.h"
 #include "../renderercommon/qgl.h"
 
+#define GLE(ret, name, ...) extern name##proc * qgl##name;
+QGL_1_1_PROCS;
+QGL_1_1_FIXED_FUNCTION_PROCS;
+QGL_DESKTOP_1_1_PROCS;
+QGL_DESKTOP_1_1_FIXED_FUNCTION_PROCS;
+QGL_3_0_PROCS;
+#undef GLE
+
 #define GL_INDEX_TYPE		GL_UNSIGNED_INT
 typedef unsigned int glIndex_t;
 
@@ -1583,5 +1591,13 @@ size_t RE_SaveJPGToBuffer(byte *buffer, size_t bufSize, int quality,
 void RE_TakeVideoFrame( int width, int height,
 		byte *captureBuffer, byte *encodeBuffer, qboolean motionJpeg );
 
+void R_DrawElements( int numIndexes, const glIndex_t *indexes );
+void VectorArrayNormalize( vec4_t *normals, unsigned int count );
+
+#ifdef idppc_altivec
+void LerpMeshVertexes_altivec( md3Surface_t *surf, float backlerp );
+void ProjectDlightTexture_altivec( void );
+void RB_CalcDiffuseColor_altivec( unsigned char *colors );
+#endif
 
 #endif //TR_LOCAL_H
