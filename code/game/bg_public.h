@@ -657,6 +657,7 @@ qboolean	BG_CanItemBeGrabbed( int gametype, const entityState_t *ent, const play
 #define	DF_NO_FALLING			8
 #define DF_FIXED_FOV			16
 #define	DF_NO_FOOTSTEPS			32
+#define DF_NO_SELF_DAMAGE               64
 
 // content masks
 #define	MASK_ALL				(-1)
