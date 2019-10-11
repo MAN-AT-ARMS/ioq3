@@ -530,9 +530,11 @@ void Touch_Item (gentity_t *ent, gentity_t *other, trace_t *trace) {
 	}
 
 	// non zero wait overrides respawn time
+#if 0
 	if ( ent->wait ) {
 		respawn = ent->wait;
 	}
+#endif
 
 	// random can be used to vary the respawn time
 	if ( ent->random ) {
